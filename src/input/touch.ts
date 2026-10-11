@@ -7,6 +7,7 @@ import { DrawGesture } from './drawGesture';
 import { VirtualStick } from './virtualStick';
 
 type Role = 'stick' | 'draw' | 'pan' | 'ui';
+export const STICK_ZONE = 0.46;
 
 export class InputManager {
   stick = new VirtualStick();
@@ -50,7 +51,8 @@ export class InputManager {
       this.roles.set(id, 'ui');
       return;
     }
-    const left = x < this.camera.viewW / 2;
+    // 操作ゾーン：左46%=移動スティック／右54%=ドロー描画（SPEC 1.2）
+    const left = x < this.camera.viewW * STICK_ZONE;
     const sameSideBusy = left ? this.stick.active : this.gesture.active;
     if (sameSideBusy || this.panPts.size > 0) {
       // 2本指 → カメラ
@@ -114,10 +116,11 @@ export class InputManager {
     const h = this.getHero();
     if (!h) return;
     this.gesture.cancel();
-    const v = this.moveVector();
+    const v = this.worldMove();
     h.cmds.push({ t: 'evade', dx: v.x, dy: v.y });
   }
 
+  /** 画面座標系の移動入力（スティック or WASD）。 */
   moveVector() {
     const v = this.stick.vector();
     let kx = 0;
@@ -133,11 +136,17 @@ export class InputManager {
     return v;
   }
 
+  /** 画面上のスティック方向 → ワールドの移動方向（横画面では90°回転。SPEC 1.3(b)）。 */
+  worldMove() {
+    const v = this.moveVector();
+    return this.camera.screenDirToWorld(v.x, v.y);
+  }
+
   /** 毎フレーム：移動入力をキャストへ反映。 */
   apply() {
     const h = this.getHero();
     if (!h) return;
-    const v = this.enabled ? this.moveVector() : { x: 0, y: 0 };
+    const v = this.enabled ? this.worldMove() : { x: 0, y: 0 };
     h.moveX = v.x;
     h.moveY = v.y;
   }

@@ -49,7 +49,7 @@ export function showTitle(root: HTMLElement, onStart: (r: TitleResult) => void) 
     const d = c.draw;
     el.innerHTML = `
       <div class="panel wide">
-        <div class="logo">おとぎアリーナ<small>縦型3レーン・ドローショット対戦</small></div>
+        <div class="logo">おとぎアリーナ<small>3レーン・ドローショット対戦（横画面推奨）</small></div>
         <h2>キャスト</h2>
         <div class="grid casters">
           ${CASTERS.map(

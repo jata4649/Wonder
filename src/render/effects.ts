@@ -3,6 +3,8 @@ import { teamColor } from '../config/settings';
 import type { Team } from '../config/types';
 import type { GameEvent } from '../sim/world';
 import type { Camera } from './camera';
+import { laneName } from '../input/orientation';
+import type { UprightQueue } from './uprightText';
 
 interface Fx {
   kind: 'ring' | 'sweep' | 'num' | 'text' | 'spark' | 'banner';
@@ -55,14 +57,14 @@ export class Effects {
         case 'baseDestroyed': {
           this.add({ kind: 'ring', x: e.base.x, y: e.base.y, r: 260, t: 0, T: 0.8, color: '#ffd23f' });
           camera.addShake(14);
-          const lane = ['左', '中央', '右'][e.base.lane as number] ?? '';
+          const lane = laneName(e.base.lane as number);
           const own = e.base.team === this.viewTeam;
           this.banner(`${own ? '自軍' : '敵軍'}${lane}${e.base.tier === 'front' ? '手前' : '奥'}拠点 陥落`, own ? '#ff8080' : '#ffd23f');
           break;
         }
         case 'gateOpen': {
           const own = e.base.team === this.viewTeam;
-          const lane = ['左', '中央', '右'][e.base.lane as number] ?? '';
+          const lane = laneName(e.base.lane as number);
           this.banner(`${own ? '自軍' : '敵軍'}${lane}の${e.base.gate?.kind === 'yukyu' ? '悠久門' : '刹那門'}が開いた`, '#cfe3ff');
           break;
         }
@@ -93,7 +95,7 @@ export class Effects {
           this.add({ kind: 'ring', x: e.x, y: e.y, r: 90, t: 0, T: 0.5, color: '#ffd23f' });
           break;
         case 'soulAnnounce':
-          if (e.team === this.viewTeam) this.banner(`ソウル予告：${e.soul.name}（${['左', '中央', '右'][e.lane]}レーン）`, '#d9b3ff');
+          if (e.team === this.viewTeam) this.banner(`ソウル予告：${e.soul.name}（${laneName(e.lane)}レーン）`, '#d9b3ff');
           break;
         case 'giantSummon': {
           const own = e.giant.team === this.viewTeam;
@@ -150,7 +152,7 @@ export class Effects {
     this.add({ kind: 'banner', x: 0, y: 0, r: 0, t: 0, T, color, text, size: 26 });
   }
 
-  draw(ctx: CanvasRenderingContext2D) {
+  draw(ctx: CanvasRenderingContext2D, up: UprightQueue, _camera: Camera) {
     for (const f of this.list) {
       if (f.kind === 'banner') continue;
       const k = f.t / f.T;
@@ -186,14 +188,8 @@ export class Effects {
           break;
         case 'num':
         case 'text':
-          ctx.font = `900 ${f.size}px system-ui, sans-serif`;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.lineWidth = 5;
-          ctx.strokeStyle = 'rgba(0,0,0,0.75)';
-          ctx.strokeText(f.text!, f.x, f.y - 40 * k);
-          ctx.fillStyle = f.color;
-          ctx.fillText(f.text!, f.x, f.y - 40 * k);
+          // 正立テキスト（画面の上方向へ浮き上がる）
+          up.text(f.x, f.y, f.text!, { size: f.size!, weight: '900', color: f.color, stroke: 'rgba(0,0,0,0.75)', dy: 40 * k, alpha: 1 - k });
           break;
       }
     }

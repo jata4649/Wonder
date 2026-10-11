@@ -6,7 +6,8 @@ import type { Team } from '../config/types';
 import type { Mob } from '../sim/units/types';
 import type { World } from '../sim/world';
 import type { Camera } from './camera';
-import { safeTop } from './hud';
+import { safeTop, topBarHeight } from './hud';
+import { orient } from '../input/orientation';
 
 const PING_ICON: Record<string, string> = { gather: '集', retreat: '退', caution: '!', enemy: '敵' };
 
@@ -20,7 +21,7 @@ export class Minimap {
   /** 10Hz で再描画し、毎フレームはキャッシュを貼るだけ（60fps 対策）。 */
   drawCached(ctx: CanvasRenderingContext2D, world: World, team: Team, camera: Camera, playerId: number, dpr: number, dt: number) {
     this.layout(camera.viewW, camera.viewH);
-    const key = `${this.expanded}:${camera.viewW}x${camera.viewH}:${dpr}`;
+    const key = `${this.expanded}:${orient.land}:${camera.viewW}x${camera.viewH}:${dpr}`;
     this.age += dt;
     if (!this.cache || key !== this.cacheKey || this.age >= 0.1) {
       this.age = 0;
@@ -51,16 +52,26 @@ export class Minimap {
   }
 
   layout(viewW: number, viewH: number) {
-    const mapW = PLAY_X1 - PLAY_X0;
-    const mapH = PLAY_Y1 - PLAY_Y0;
+    // 縦画面：縦長、横画面：横長（ワールドを90°回転した写像。SPEC 1.3(d)）
+    const land = orient.land;
+    const mapW = land ? PLAY_Y1 - PLAY_Y0 : PLAY_X1 - PLAY_X0;
+    const mapH = land ? PLAY_X1 - PLAY_X0 : PLAY_Y1 - PLAY_Y0;
+    const top = topBarHeight(viewH) + 6 + safeTop();
     if (this.expanded) {
-      const h = Math.min(viewH * 0.72, ((viewW - 40) * mapH) / mapW);
-      const w = (h * mapW) / mapH;
+      const maxW = viewW - 40;
+      const maxH = viewH * 0.78;
+      const k = Math.min(maxW / mapW, maxH / mapH);
+      const w = mapW * k;
+      const h = mapH * k;
       this.rect = { x: (viewW - w) / 2, y: (viewH - h) / 2, w, h };
+    } else if (land) {
+      const w = Math.min(176, viewW * 0.2);
+      const h = (w * mapH) / mapW;
+      this.rect = { x: viewW - w - 8, y: top, w, h };
     } else {
       const w = Math.min(100, viewW * 0.26);
       const h = (w * mapH) / mapW;
-      this.rect = { x: viewW - w - 8, y: 46 + safeTop(), w, h };
+      this.rect = { x: viewW - w - 8, y: top, w, h };
     }
   }
 
@@ -92,10 +103,24 @@ export class Minimap {
   draw(ctx: CanvasRenderingContext2D, world: World, team: Team, camera: Camera, playerId: number) {
     this.layout(camera.viewW, camera.viewH);
     const { x, y, w, h } = this.rect;
-    const sx = w / (PLAY_X1 - PLAY_X0);
-    const sy = h / (PLAY_Y1 - PLAY_Y0);
-    const X = (wx: number) => x + (wx - PLAY_X0) * sx;
-    const Y = (wy: number) => y + (wy - PLAY_Y0) * sy;
+    const land = orient.land;
+    // ワールド→ミニマップ。横画面では mx=(H-wy), my=wx の回転写像
+    const kx = land ? w / (PLAY_Y1 - PLAY_Y0) : w / (PLAY_X1 - PLAY_X0);
+    const ky = land ? h / (PLAY_X1 - PLAY_X0) : h / (PLAY_Y1 - PLAY_Y0);
+    const P = (wx: number, wy: number) =>
+      land ? { x: x + (PLAY_Y1 - wy) * kx, y: y + (wx - PLAY_X0) * ky } : { x: x + (wx - PLAY_X0) * kx, y: y + (wy - PLAY_Y0) * ky };
+    const X = (wx: number, wy: number) => P(wx, wy).x;
+    const Y = (wx: number, wy: number) => P(wx, wy).y;
+    /** ワールドの矩形をミニマップ上の矩形として塗る（回転しても正しく） */
+    const rectW = (x0: number, y0: number, x1: number, y1: number, mode: 'fill' | 'stroke' = 'fill') => {
+      const a = P(x0, y0);
+      const b = P(x1, y1);
+      const rx = Math.min(a.x, b.x);
+      const ry = Math.min(a.y, b.y);
+      if (mode === 'fill') ctx.fillRect(rx, ry, Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+      else ctx.strokeRect(rx, ry, Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+    };
+    const unit = Math.min(kx, ky);
     if (this.expanded) {
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.fillRect(0, 0, camera.viewW, camera.viewH);
@@ -104,22 +129,22 @@ export class Minimap {
     ctx.fillRect(x, y, w, h);
     // 森とレーン
     ctx.fillStyle = '#244a2b';
-    for (const s of FOREST_STRIPS) ctx.fillRect(X(s.x0), Y(FOREST_Y0), (s.x1 - s.x0) * sx, (FOREST_Y1 - FOREST_Y0) * sy);
+    for (const st of FOREST_STRIPS) rectW(st.x0, FOREST_Y0, st.x1, FOREST_Y1);
     ctx.fillStyle = 'rgba(190,170,120,0.55)';
-    for (const lx of LANE_X) ctx.fillRect(X(lx - LANE_WIDTH / 2), y, LANE_WIDTH * sx, h);
-    ctx.fillRect(x, Y(PLAY_Y0), w, (450 - PLAY_Y0) * sy);
-    ctx.fillRect(x, Y(3150), w, (PLAY_Y1 - 3150) * sy);
+    for (const lx of LANE_X) rectW(lx - LANE_WIDTH / 2, PLAY_Y0, lx + LANE_WIDTH / 2, PLAY_Y1);
+    rectW(PLAY_X0, PLAY_Y0, PLAY_X1, 450);
+    rectW(PLAY_X0, 3150, PLAY_X1, PLAY_Y1);
     // 拠点
     for (const b of world.bases) {
-      const r = Math.max(3, b.r * sx * (this.expanded ? 1 : 1.3));
+      const r = Math.max(3, b.r * unit * (this.expanded ? 1 : 1.3));
       ctx.fillStyle = b.alive ? teamColor(b.team) : 'rgba(80,80,80,0.8)';
       ctx.beginPath();
-      if (b.tier === 'castle') ctx.rect(X(b.x) - r, Y(b.y) - r * 0.7, r * 2, r * 1.4);
-      else ctx.arc(X(b.x), Y(b.y), r, 0, Math.PI * 2);
+      if (b.tier === 'castle') ctx.rect(X(b.x, b.y) - r, Y(b.x, b.y) - r, r * 2, r * 2);
+      else ctx.arc(X(b.x, b.y), Y(b.x, b.y), r, 0, Math.PI * 2);
       ctx.fill();
       if (b.gate && b.gate.state !== 'open' && b.alive) {
         ctx.fillStyle = '#ddd';
-        ctx.fillRect(X(b.gate.x - LANE_WIDTH / 2), Y(b.gate.y) - 1, LANE_WIDTH * sx, 2);
+        rectW(b.gate.x - LANE_WIDTH / 2, b.gate.y - 6, b.gate.x + LANE_WIDTH / 2, b.gate.y + 6);
       }
     }
     // 兵士
@@ -127,7 +152,7 @@ export class Minimap {
     for (const m of world.minions) {
       if (!Minimap.inVision(world, m, team)) continue;
       ctx.fillStyle = teamColor(m.team);
-      ctx.fillRect(X(m.x) - dot / 2, Y(m.y) - dot / 2, dot, dot);
+      ctx.fillRect(X(m.x, m.y) - dot / 2, Y(m.x, m.y) - dot / 2, dot, dot);
     }
     // 巨人
     for (const g of world.giants) {
@@ -136,7 +161,7 @@ export class Minimap {
       ctx.strokeStyle = '#ffd23f';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(X(g.x), Y(g.y), this.expanded ? 9 : 5, 0, Math.PI * 2);
+      ctx.arc(X(g.x, g.y), Y(g.x, g.y), this.expanded ? 9 : 5, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
     }
@@ -149,21 +174,22 @@ export class Minimap {
       const r = this.expanded ? 8 : 4.5;
       ctx.fillStyle = teamColor(hh.team);
       ctx.beginPath();
-      ctx.arc(X(hh.x), Y(hh.y), r, 0, Math.PI * 2);
+      ctx.arc(X(hh.x, hh.y), Y(hh.x, hh.y), r, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = hh.id === playerId ? '#fff' : 'rgba(0,0,0,0.6)';
       ctx.lineWidth = hh.id === playerId ? 2 : 1;
       ctx.stroke();
       if (this.expanded) {
         ctx.fillStyle = '#fff';
-        ctx.fillText(hh.def.glyph, X(hh.x), Y(hh.y));
+        ctx.fillText(hh.def.glyph, X(hh.x, hh.y), Y(hh.x, hh.y));
       }
     }
     // ソウル召喚予定地点（自軍のみ見える）
     const ann = world.soul.teams[team].announced;
     if (ann) {
-      const ax = X(LANE_X[ann.lane]);
-      const ay = Y(team === 0 ? 2490 : 1110);
+      const ap = P(LANE_X[ann.lane], team === 0 ? 2490 : 1110);
+      const ax = ap.x;
+      const ay = ap.y;
       ctx.fillStyle = '#d9b3ff';
       ctx.font = `900 ${this.expanded ? 18 : 11}px sans-serif`;
       ctx.fillText('魂', ax, ay);
@@ -175,17 +201,17 @@ export class Minimap {
       ctx.strokeStyle = '#ffd23f';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(X(p.x), Y(p.y), (this.expanded ? 14 : 8) * (1 + (1 - k) * 0.5), 0, Math.PI * 2);
+      ctx.arc(X(p.x, p.y), Y(p.x, p.y), (this.expanded ? 14 : 8) * (1 + (1 - k) * 0.5), 0, Math.PI * 2);
       ctx.stroke();
       ctx.fillStyle = '#ffd23f';
       ctx.font = `900 ${this.expanded ? 14 : 9}px sans-serif`;
-      ctx.fillText(PING_ICON[p.kind], X(p.x), Y(p.y));
+      ctx.fillText(PING_ICON[p.kind], X(p.x, p.y), Y(p.x, p.y));
     }
     // カメラの範囲
     const bb = camera.bounds(0);
     ctx.strokeStyle = 'rgba(255,255,255,0.7)';
     ctx.lineWidth = 1;
-    ctx.strokeRect(X(bb.x0), Y(bb.y0), (bb.x1 - bb.x0) * sx, (bb.y1 - bb.y0) * sy);
+    rectW(bb.x0, bb.y0, bb.x1, bb.y1, 'stroke');
     ctx.strokeStyle = 'rgba(255,255,255,0.5)';
     ctx.lineWidth = 1.5;
     ctx.strokeRect(x, y, w, h);

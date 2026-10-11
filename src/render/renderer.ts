@@ -1,7 +1,7 @@
 // Canvas2D レンダラ。World を読むだけで、World を書き換えない。
 import { renderBackground } from './background';
 import { Camera } from './camera';
-import { drawLevel, drawPlayerStatus, drawSoul, drawTopBar, safeTop } from './hud';
+import { drawLaneStatus, drawLevel, drawPlayerStatus, drawSoul, drawTopBar, hudLayout } from './hud';
 import { Minimap } from './minimap';
 import { WORLD_H, WORLD_W } from '../config/map';
 import { teamColor, teamTint } from '../config/settings';
@@ -13,6 +13,9 @@ import { forestAt } from '../config/map';
 import type { InputManager } from '../input/touch';
 import type { Hero } from '../sim/units/hero';
 import type { Effects } from './effects';
+import { UprightQueue } from './uprightText';
+import { getImage } from './assets';
+import { orient, updateOrientation } from '../input/orientation';
 
 export interface RenderView {
   player?: Hero;
@@ -27,6 +30,8 @@ export class Renderer {
   camera = new Camera();
   minimap = new Minimap();
   dpr = 1;
+  /** 正立テキスト＆バーのキュー */
+  up = new UprightQueue();
   /** 視点のチーム（自軍） */
   viewTeam: Team = 0;
   private bg?: HTMLCanvasElement;
@@ -37,6 +42,8 @@ export class Renderer {
   }
 
   resize() {
+    updateOrientation();
+    document.documentElement.classList.toggle('land', orient.land);
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -76,30 +83,43 @@ export class Renderer {
     this.drawStraight(world);
     this.drawDrawShots(world);
     this.drawLobShells(world);
-    view.fx?.draw(ctx);
+    view.fx?.draw(ctx, this.up, camera);
     this.drawPings(world);
     if (view.player && view.input) this.drawStance(view.player, view.input);
 
-    // HUD（画面座標）
+    // HUD（画面座標）。まずワールド内の文字・バーを正立で描く
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.up.flush(ctx, camera);
     if (view.player && view.input?.gesture.active && view.player.drawStance) this.drawRangeShade(view.player);
-    drawTopBar(ctx, world, this.camera.viewW);
-    drawSoul(ctx, world, this.viewTeam);
-    drawLevel(ctx, world, this.viewTeam, this.camera.viewW);
+    drawTopBar(ctx, world, this.camera.viewW, this.camera.viewH);
+    drawLaneStatus(ctx, world, this.viewTeam, this.camera.viewH);
+    drawSoul(ctx, world, this.viewTeam, this.camera.viewH);
+    drawLevel(ctx, world, this.viewTeam, this.camera.viewH);
     if (view.player) drawPlayerStatus(ctx, view.player, this.camera.viewH);
     if (view.input) this.drawStick(view.input);
     this.minimap.drawCached(ctx, world, this.viewTeam, this.camera, view.player?.id ?? -1, this.dpr, view.dt ?? 1 / 60);
     if (view.fps !== undefined) {
       ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.fillRect(10, 134 + safeTop(), 70, 20);
+      const fp = hudLayout(this.camera.viewH).fps;
+      ctx.fillRect(fp.x, fp.y, 70, 20);
       ctx.fillStyle = view.fps >= 55 ? '#7CFC8A' : view.fps >= 40 ? '#ffd23f' : '#ff6b6b';
       ctx.font = 'bold 12px monospace';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      ctx.fillText(`${view.fps.toFixed(0)} fps`, 16, 144 + safeTop());
+      ctx.fillText(`${view.fps.toFixed(0)} fps`, fp.x + 6, fp.y + 10);
     }
     if (view.player?.notice) this.drawNotice(view.player.notice.text);
     view.fx?.drawScreen(ctx, this.camera.viewW, this.camera.viewH);
+  }
+
+  /** 画面下方向にずらした影（向きに関係なく画面上で横長の楕円）。 */
+  private shadow(x: number, y: number, rx: number, ry: number, off: number, alpha = 0.35) {
+    const { ctx, camera } = this;
+    const u = camera.up;
+    ctx.fillStyle = `rgba(0,0,0,${alpha})`;
+    ctx.beginPath();
+    ctx.ellipse(x - u.x * off, y - u.y * off, rx, ry, camera.land ? Math.PI / 2 : 0, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   private drawOrbs(world: World) {
@@ -170,13 +190,7 @@ export class Renderer {
       ctx.beginPath();
       ctx.arc(p.x, p.y, 40 + 40 * (1 - k), 0, Math.PI * 2);
       ctx.stroke();
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.fillRect(p.x - 40, p.y - 110, 80, 34);
-      ctx.fillStyle = '#ffd23f';
-      ctx.font = '900 24px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(icon[p.kind], p.x, p.y - 93);
+      this.up.text(p.x, p.y, icon[p.kind], { size: 24, weight: '900', color: '#ffd23f', dy: 93, bg: 'rgba(0,0,0,0.6)' });
     }
   }
 
@@ -194,14 +208,15 @@ export class Renderer {
         ctx.fill();
         ctx.stroke();
       }
-      ctx.fillStyle = 'rgba(0,0,0,0.4)';
-      ctx.beginPath();
-      ctx.ellipse(g.x, g.y + g.r * 0.6, g.r * 1.1, g.r * 0.5, 0, 0, Math.PI * 2);
-      ctx.fill();
+      this.shadow(g.x, g.y, g.r * 1.1, g.r * 0.5, g.r * 0.6, 0.4);
       const wob = Math.sin(world.time * 6) * 3;
+      const u = this.camera.up;
+      const gx = g.x + u.x * wob;
+      const gy = g.y + u.y * wob;
+      const img = getImage('giants', g.def.type);
       ctx.fillStyle = g.hitFlash > 0 ? '#fff' : col;
       ctx.beginPath();
-      ctx.arc(g.x, g.y + wob, g.r, 0, Math.PI * 2);
+      ctx.arc(gx, gy, g.r, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = '#ffd23f';
       ctx.lineWidth = 6;
@@ -213,23 +228,11 @@ export class Renderer {
         ctx.arc(g.x, g.y, g.r + 30, world.time * 12, world.time * 12 + 3);
         ctx.stroke();
       }
-      ctx.fillStyle = '#fff';
-      ctx.font = `900 ${Math.round(g.r)}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(g.def.glyph, g.x, g.y + wob + 2);
-      const bw = 130;
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(g.x - bw / 2, g.y - g.r - 26, bw, 12);
-      ctx.fillStyle = '#ffd23f';
-      ctx.fillRect(g.x - bw / 2, g.y - g.r - 26, (bw * g.hp) / g.maxHp, 12);
-      ctx.font = 'bold 18px sans-serif';
-      ctx.fillStyle = '#fff';
-      ctx.fillText(g.def.name, g.x, g.y - g.r - 42);
-      if (g.downTimer > 0) {
-        ctx.fillStyle = '#ffd23f';
-        ctx.fillText('DOWN', g.x, g.y + g.r + 20);
-      }
+      if (img) this.up.image(gx, gy, img, g.r * 2.6, g.r * 2.6, -g.r * 1.1, g.hitFlash > 0 ? 0.6 : 1);
+      else this.up.text(gx, gy, g.def.glyph, { size: g.r, weight: '900' });
+      this.up.bar(g.x, g.y, 130, 12, g.hp / g.maxHp, '#ffd23f', g.r + 20, 'rgba(0,0,0,0.7)');
+      this.up.text(g.x, g.y, g.def.name, { size: 18, dy: g.r + 42, stroke: 'rgba(0,0,0,0.7)' });
+      if (g.downTimer > 0) this.up.text(g.x, g.y, 'DOWN', { size: 18, color: '#ffd23f', dy: -(g.r + 20) });
     }
   }
 
@@ -245,12 +248,12 @@ export class Renderer {
       const hidden = h.team === this.viewTeam && forestAt(h.x, h.y) >= 0;
       const z = h.z;
       const col = teamColor(h.team);
-      // 影
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
-      ctx.beginPath();
-      ctx.ellipse(h.x, h.y + h.r * 0.7, h.r * (1 - z / 400), h.r * 0.45 * (1 - z / 400), 0, 0, Math.PI * 2);
-      ctx.fill();
-      const y = h.y - z;
+      // 影（跳躍中は小さく）
+      this.shadow(h.x, h.y, h.r * (1 - z / 400), h.r * 0.45 * (1 - z / 400), h.r * 0.7);
+      // 跳躍の高さは画面の上方向へ
+      const u = this.camera.up;
+      const hx = h.x + u.x * z;
+      const y = h.y + u.y * z;
       ctx.globalAlpha = hidden ? 0.65 : 1;
       // 攻撃姿勢（相手にも見える白いエフェクト）
       if (h.drawStance) {
@@ -259,19 +262,19 @@ export class Renderer {
         const t = world.time * 6;
         for (let i = 0; i < 3; i++) {
           ctx.beginPath();
-          ctx.arc(h.x, y, h.r + 10 + i * 5, t + i * 2, t + i * 2 + 1.6);
+          ctx.arc(hx, y, h.r + 10 + i * 5, t + i * 2, t + i * 2 + 1.6);
           ctx.stroke();
         }
       }
       if (h.invulnTimer > 0) {
         ctx.fillStyle = 'rgba(255,255,255,0.25)';
         ctx.beginPath();
-        ctx.arc(h.x, y, h.r + 8, 0, Math.PI * 2);
+        ctx.arc(hx, y, h.r + 8, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.fillStyle = h.hitFlash > 0 ? '#fff' : h.def.color;
       ctx.beginPath();
-      ctx.arc(h.x, y, h.r, 0, Math.PI * 2);
+      ctx.arc(hx, y, h.r, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = col;
       ctx.lineWidth = 6;
@@ -280,37 +283,23 @@ export class Renderer {
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(h.x, y, h.r + 5, 0, Math.PI * 2);
+        ctx.arc(hx, y, h.r + 5, 0, Math.PI * 2);
         ctx.stroke();
       }
       // 向き
       const fl = Math.hypot(h.faceX, h.faceY) || 1;
       ctx.fillStyle = col;
       ctx.beginPath();
-      ctx.arc(h.x + (h.faceX / fl) * (h.r + 6), y + (h.faceY / fl) * (h.r + 6), 6, 0, Math.PI * 2);
+      ctx.arc(hx + (h.faceX / fl) * (h.r + 6), y + (h.faceY / fl) * (h.r + 6), 6, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = h.def.accent;
-      ctx.font = 'bold 26px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(h.def.glyph, h.x, y + 1);
-      // HP/MP
-      const bw = 64;
-      ctx.fillStyle = 'rgba(0,0,0,0.65)';
-      ctx.fillRect(h.x - bw / 2, y - h.r - 22, bw, 9);
-      ctx.fillStyle = h.team === this.viewTeam ? '#7CFC8A' : '#ff6b6b';
-      ctx.fillRect(h.x - bw / 2, y - h.r - 22, (bw * h.hp) / h.maxHp, 9);
-      if (h.team === this.viewTeam) {
-        ctx.fillStyle = 'rgba(0,0,0,0.65)';
-        ctx.fillRect(h.x - bw / 2, y - h.r - 12, bw, 5);
-        ctx.fillStyle = '#5ab8ff';
-        ctx.fillRect(h.x - bw / 2, y - h.r - 12, (bw * h.mp) / h.stat('maxMp'), 5);
-      }
-      if (h.downTimer > 0) {
-        ctx.fillStyle = '#ffd23f';
-        ctx.font = 'bold 18px sans-serif';
-        ctx.fillText('DOWN', h.x, y - h.r - 34);
-      }
+      const img = getImage('casters', h.def.id);
+      if (img) this.up.image(hx, y, img, h.r * 2.6, h.r * 2.6, -h.r * 1.1, hidden ? 0.65 : 1);
+      else this.up.text(hx, y, h.def.glyph, { size: 26, color: h.def.accent, alpha: hidden ? 0.65 : 1 });
+      // HP/MP（正立のバー）
+      this.up.bar(hx, y, 64, 9, h.hp / h.maxHp, h.team === this.viewTeam ? '#7CFC8A' : '#ff6b6b', h.r + 17.5);
+      if (h.team === this.viewTeam) this.up.bar(hx, y, 64, 5, h.mp / h.stat('maxMp'), '#5ab8ff', h.r + 9.5);
+      this.up.text(hx, y, h.def.name, { size: 14, dy: h.r + 32, stroke: 'rgba(0,0,0,0.7)', color: h === player ? '#ffd23f' : '#fff', alpha: hidden ? 0.65 : 1 });
+      if (h.downTimer > 0) this.up.text(hx, y, 'DOWN', { size: 18, color: '#ffd23f', dy: -(h.r + 18) });
       ctx.globalAlpha = 1;
     }
   }
@@ -389,8 +378,10 @@ export class Renderer {
     const { ctx } = this;
     for (const s of world.lobs) {
       const k = Math.min(1, s.t / s.T);
-      const x = s.x0 + (s.tx - s.x0) * k;
-      const y = s.y0 + (s.ty - s.y0) * k - Math.sin(k * Math.PI) * 180;
+      const hgt = Math.sin(k * Math.PI) * 180;
+      const u = this.camera.up;
+      const x = s.x0 + (s.tx - s.x0) * k + u.x * hgt;
+      const y = s.y0 + (s.ty - s.y0) * k + u.y * hgt;
       ctx.fillStyle = teamColor(s.team);
       ctx.beginPath();
       ctx.arc(x, y, 16, 0, Math.PI * 2);
@@ -458,8 +449,9 @@ export class Renderer {
         ctx.lineTo(h.x + dx * L, h.y + dy * L);
       } else {
         // 放物線のイメージ
-        const mx = (h.x + last.x) / 2;
-        const my = (h.y + last.y) / 2 - 120;
+        const u = this.camera.up;
+        const mx = (h.x + last.x) / 2 + u.x * 120;
+        const my = (h.y + last.y) / 2 + u.y * 120;
         ctx.quadraticCurveTo(mx, my, last.x, last.y);
       }
       ctx.stroke();
@@ -529,10 +521,13 @@ export class Renderer {
       if (!world.isVisibleTo(m, this.viewTeam)) continue;
       const col = teamColor(m.team);
       const forming = m.squad.formTimer > 0 && !m.ramming;
+      const img = getImage('minions', `${m.team === this.viewTeam ? 'ally' : 'enemy'}_${m.big ? 'large' : 'small'}`);
       ctx.globalAlpha = m.downTimer > 0 ? 0.6 : 1;
       ctx.fillStyle = m.hitFlash > 0 ? '#fff' : col;
       ctx.beginPath();
-      if (m.big) {
+      if (img) {
+        ctx.arc(m.x, m.y, m.r * 0.9, 0, Math.PI * 2);
+      } else if (m.big) {
         ctx.roundRect(m.x - m.r, m.y - m.r, m.r * 2, m.r * 2, 6);
       } else {
         // 進行方向に尖った形
@@ -553,12 +548,9 @@ export class Renderer {
         ctx.arc(m.x, m.y, m.r + 6, 0, Math.PI * 2);
         ctx.stroke();
       }
-      if (m.hp < m.maxHp) {
-        ctx.fillStyle = 'rgba(0,0,0,0.6)';
-        ctx.fillRect(m.x - m.r, m.y - m.r - 10, m.r * 2, 5);
-        ctx.fillStyle = '#7CFC8A';
-        ctx.fillRect(m.x - m.r, m.y - m.r - 10, (m.r * 2 * m.hp) / m.maxHp, 5);
-      }
+      if (img) this.up.image(m.x, m.y, img, m.r * 2.8, m.r * 2.8, -m.r * 1.2, m.downTimer > 0 ? 0.6 : 1);
+      else if (m.big) this.up.text(m.x, m.y, '大', { size: 18, weight: '900', color: '#fff' });
+      if (m.hp < m.maxHp) this.up.bar(m.x, m.y, m.r * 2, 5, m.hp / m.maxHp, '#7CFC8A', m.r + 7.5, 'rgba(0,0,0,0.6)');
       ctx.globalAlpha = 1;
     }
   }
@@ -621,16 +613,9 @@ export class Renderer {
           ctx.lineTo(x, g.y + 12);
           ctx.stroke();
         }
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 26px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
         const label = g.kind === 'yukyu' ? '悠久門' : '刹那門';
-        const txt = g.state === 'opening' ? `${label} ${Math.ceil(g.timer)}` : `${label} 🔒`;
-        ctx.fillStyle = 'rgba(0,0,0,0.6)';
-        ctx.fillRect(g.x - 80, g.y - 50, 160, 32);
-        ctx.fillStyle = '#fff';
-        ctx.fillText(txt, g.x, g.y - 34);
+        const txt = g.state === 'opening' ? `${label} 開門 ${Math.ceil(g.timer)}s` : `${label} 🔒`;
+        this.up.text(g.x, g.y, txt, { size: 24, dy: 40, bg: 'rgba(0,0,0,0.6)' });
       } else {
         ctx.fillStyle = 'rgba(255,255,255,0.12)';
         ctx.fillRect(g.x - half, g.y - 6, 26, 12);
@@ -649,25 +634,23 @@ export class Renderer {
       return;
     }
     const flash = b.hitFlash > 0;
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.beginPath();
-    ctx.ellipse(b.x, b.y + b.r * 0.5, b.r * 1.05, b.r * 0.5, 0, 0, Math.PI * 2);
-    ctx.fill();
+    this.shadow(b.x, b.y, b.r * 1.05, b.r * 0.5, b.r * 0.5);
+    const img = getImage('bases', b.tier === 'castle' ? (b.team === this.viewTeam ? 'castle_ally' : 'castle_enemy') : b.def.kind);
+    const KIND_NAME = { small: '小拠点', normal: '拠点', large: '大拠点', huge: '特大拠点', castle: '城' } as const;
 
     if (b.tier === 'castle') {
       // 城：塔の形
       const r = b.r;
-      ctx.fillStyle = flash ? '#fff' : col;
-      ctx.beginPath();
-      ctx.roundRect(b.x - r, b.y - r * 0.7, r * 2, r * 1.4, 16);
-      ctx.fill();
-      ctx.fillStyle = 'rgba(0,0,0,0.25)';
-      for (let i = -2; i <= 2; i++) ctx.fillRect(b.x + i * r * 0.4 - 12, b.y - r * 0.9, 24, 30);
-      ctx.fillStyle = '#fff';
-      ctx.font = `bold ${r * 0.7}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('城', b.x, b.y + 4);
+      if (!img) {
+        ctx.fillStyle = flash ? '#fff' : col;
+        ctx.beginPath();
+        ctx.roundRect(b.x - r, b.y - r * 0.7, r * 2, r * 1.4, 16);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,0.25)';
+        for (let i = -2; i <= 2; i++) ctx.fillRect(b.x + i * r * 0.4 - 12, b.y - r * 0.9, 24, 30);
+      }
+      if (img) this.up.image(b.x, b.y, img, r * 2.4, r * 2.4, -r * 0.9, flash ? 0.7 : 1);
+      else this.up.text(b.x, b.y, '城', { size: r * 0.7 });
       return;
     }
     const sides = b.def.kind === 'small' ? 4 : b.def.kind === 'normal' ? 6 : b.def.kind === 'large' ? 8 : 10;
@@ -695,12 +678,10 @@ export class Renderer {
     ctx.beginPath();
     ctx.arc(b.x, b.y, b.r * 0.62, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * b.hp) / b.maxHp);
     ctx.stroke();
-    ctx.fillStyle = '#fff';
-    ctx.font = `bold ${Math.round(b.r * 0.55)}px sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    if (img) this.up.image(b.x, b.y, img, b.r * 2.2, b.r * 2.2, -b.r * 0.9, flash ? 0.7 : 1);
     const label = { small: '小', normal: '拠', large: '大', huge: '特', castle: '城' }[b.def.kind];
-    ctx.fillText(label, b.x, b.y + 2);
+    if (!img) this.up.text(b.x, b.y, label, { size: Math.round(b.r * 0.55) });
+    this.up.text(b.x, b.y, KIND_NAME[b.def.kind], { size: 18, dy: -(b.r + 18), stroke: 'rgba(0,0,0,0.7)' });
     if (b.gate && b.gate.state !== 'open') {
       // 無敵（門が閉じている）表示
       ctx.strokeStyle = 'rgba(200,220,255,0.7)';

@@ -79,3 +79,40 @@ html, body {
 .ping:active { background: #ffd23f; color: #222; }
 .stats.heroes { margin-top: 12px; font-size: 12px; }
 .stats.heroes td { padding: 4px 2px; }
+/* ---- 縦持ちオーバーレイ ---- */
+.rotate-overlay { position: fixed; inset: 0; z-index: 30; background: rgba(10,12,18,0.92); pointer-events: auto;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; }
+.rotate-overlay .rotate-icon { font-size: 54px; animation: rot 1.6s ease-in-out infinite; }
+.rotate-overlay p { font-size: 18px; margin: 0; }
+.rotate-overlay .btn { flex: none; padding: 10px 18px; font-size: 14px; }
+@keyframes rot { 0%,30% { transform: rotate(0); } 60%,100% { transform: rotate(-90deg); } }
+
+/* ---- 横画面（SPEC 1.2）：カードは右下に横1列4枚、回避はカードの上 ---- */
+html.land .card { width: 47px; height: 63px; border-radius: 10px; }
+html.land .card.ws { width: 47px; height: 63px; border-radius: 10px; }
+html.land .card b { font-size: 20px; }
+html.land .card:nth-child(1) { right: calc(10px + 3 * 52px + env(safe-area-inset-right)); bottom: calc(10px + env(safe-area-inset-bottom)); }
+html.land .card:nth-child(2) { right: calc(10px + 2 * 52px + env(safe-area-inset-right)); bottom: calc(10px + env(safe-area-inset-bottom)); }
+html.land .card:nth-child(3) { right: calc(10px + 1 * 52px + env(safe-area-inset-right)); bottom: calc(10px + env(safe-area-inset-bottom)); }
+html.land .card:nth-child(4) { right: calc(10px + env(safe-area-inset-right)); bottom: calc(10px + env(safe-area-inset-bottom)); }
+html.land .evade-btn { width: 50px; height: 50px; font-size: 20px; border-width: 2px;
+  right: calc(34px + env(safe-area-inset-right)); bottom: calc(81px + env(safe-area-inset-bottom)); }
+html.land .pings { top: calc(clamp(34px, 9vh, 48px) + 4px + env(safe-area-inset-top)); }
+html.land .ping { width: 34px; height: 26px; font-size: 11px; }
+/* 縦画面ではピングを上部バーの下に */
+html:not(.land) .pings { top: calc(clamp(34px, 9vh, 48px) + 4px + env(safe-area-inset-top)); left: auto; right: 116px; transform: none; }
+
+/* ---- 横画面のタイトル／リザルト：上寄せ＋スクロール（開始ボタンが見切れないように） ---- */
+.screen { align-items: flex-start; }
+html.land .panel.wide { width: min(980px, 100%); padding: 12px 14px 0; }
+html.land .logo { font-size: 22px; margin: 0 0 6px; }
+html.land .panel h2 { margin: 10px 0 6px; }
+html.land .grid.casters { grid-template-columns: repeat(8, 1fr); }
+html.land .grid.casters .glyph { width: 30px; height: 30px; font-size: 15px; }
+html.land .grid.skills, html.land .grid.assists, html.land .grid.souls { grid-template-columns: repeat(3, 1fr); }
+html.land .grid.souls { grid-template-columns: repeat(4, 1fr); }
+html.land .panel { max-height: none; }
+html.land .result .panel { width: min(720px, 100%); }
+.screen > .panel { margin-top: auto; margin-bottom: auto; }
+.panel.wide { overflow: visible; max-height: none; }
+.screen.title { padding-bottom: 0; }

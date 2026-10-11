@@ -1,0 +1,9 @@
+{
+  "name": "おとぎアリーナ",
+  "short_name": "おとぎアリーナ",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#14181f",
+  "theme_color": "#14181f",
+  "start_url": "./"
+}

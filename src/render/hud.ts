@@ -1,7 +1,9 @@
-// キャンバス上の HUD（ゲージ・タイマーなど）。
+// キャンバス上の HUD。横画面の画面構成（SPEC 1.2）に従ってゾーンを分ける：
+//  上部バー（自軍ゲージ｜残り時間｜敵軍ゲージ）、左上＝レーン状況→ソウル→レベル、右上＝ミニマップ、左下＝自キャスト情報。
 import { MATCH } from '../config/balance';
 import { teamColor } from '../config/settings';
-import type { Team } from '../config/types';
+import type { LaneId, Team } from '../config/types';
+import { laneName, orient } from '../input/orientation';
 import type { Hero } from '../sim/units/hero';
 import type { World } from '../sim/world';
 
@@ -10,37 +12,56 @@ export function fmtTime(sec: number) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export function drawTopBar(ctx: CanvasRenderingContext2D, world: World, w: number) {
+/** 上部バーの高さ：clamp(34px, 9vh, 48px)。 */
+export function topBarHeight(viewH: number) {
+  return Math.max(34, Math.min(48, viewH * 0.09));
+}
+
+/** 左上の HUD 列の位置。 */
+export function hudLayout(viewH: number) {
+  const top = topBarHeight(viewH) + 6 + safeTop();
+  const laneH = orient.land ? 46 : 0; // 縦画面ではレーン状況を省略（ミニマップで代替）
+  const lane = { x: 8, y: top };
+  const soul = { x: 8, y: top + (laneH ? laneH + 4 : 0) };
+  const level = { x: 8, y: soul.y + 46 };
+  const fps = { x: 8, y: level.y + 40 };
+  return { top, lane, soul, level, fps, laneH };
+}
+
+export function drawTopBar(ctx: CanvasRenderingContext2D, world: World, w: number, viewH: number) {
   const m = world.match;
-  const barW = Math.min(150, (w - 110) / 2);
+  const H = topBarHeight(viewH);
+  const timerW = 76;
+  const barW = Math.max(80, Math.min(orient.land ? 300 : 150, (w - timerW - 40) / 2));
   const cx = w / 2;
-  const y = 10 + safeTop();
+  const y = 4 + safeTop();
+  const bh = H - 12;
   // タイマー
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
   ctx.beginPath();
-  ctx.roundRect(cx - 40, y, 80, 30, 8);
+  ctx.roundRect(cx - timerW / 2, y, timerW, H - 8, 8);
   ctx.fill();
   ctx.fillStyle = m.timeLeft < 60 ? '#ff6b6b' : '#fff';
-  ctx.font = 'bold 18px system-ui, sans-serif';
+  ctx.font = `bold ${Math.round(H * 0.45)}px system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(fmtTime(m.timeLeft), cx, y + 16);
+  ctx.fillText(fmtTime(m.timeLeft), cx, y + (H - 8) / 2 + 1);
   // ゲージ（左=自軍, 右=敵軍）
   for (const team of [0, 1] as const) {
-    const x0 = team === 0 ? cx - 46 - barW : cx + 46;
+    const x0 = team === 0 ? cx - timerW / 2 - 6 - barW : cx + timerW / 2 + 6;
     const frac = m.gauge[team] / MATCH.teamGaugeMax;
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(x0, y + 4, barW, 22);
+    ctx.fillRect(x0, y + 2, barW, bh);
     ctx.fillStyle = teamColor(team);
-    if (team === 0) ctx.fillRect(x0 + barW * (1 - frac), y + 4, barW * frac, 22);
-    else ctx.fillRect(x0, y + 4, barW * frac, 22);
+    if (team === 0) ctx.fillRect(x0 + barW * (1 - frac), y + 2, barW * frac, bh);
+    else ctx.fillRect(x0, y + 2, barW * frac, bh);
     ctx.strokeStyle = 'rgba(255,255,255,0.6)';
     ctx.lineWidth = 1.5;
-    ctx.strokeRect(x0, y + 4, barW, 22);
+    ctx.strokeRect(x0, y + 2, barW, bh);
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 14px system-ui, sans-serif';
+    ctx.font = `bold ${Math.round(bh * 0.6)}px system-ui, sans-serif`;
     ctx.textAlign = team === 0 ? 'right' : 'left';
-    ctx.fillText(m.gauge[team].toFixed(1), team === 0 ? x0 + barW - 6 : x0 + 6, y + 16);
+    ctx.fillText(m.gauge[team].toFixed(1), team === 0 ? x0 + barW - 6 : x0 + 6, y + 2 + bh / 2 + 1);
   }
 }
 
@@ -53,12 +74,65 @@ export function safeTop() {
   return cachedSafeTop;
 }
 
+/**
+ * レーン状況（左上）：各レーンの「手前／門／奥」を自軍・敵軍それぞれドットで表示。
+ * 横画面の盤面と同じく 自軍(左) → 敵軍(右) の並び。
+ */
+export function drawLaneStatus(ctx: CanvasRenderingContext2D, world: World, team: Team, viewH: number) {
+  const L = hudLayout(viewH);
+  if (!L.laneH) return;
+  const { x, y } = L.lane;
+  const w = 128;
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, L.laneH, 8);
+  ctx.fill();
+  const enemy = (1 - team) as Team;
+  ctx.font = 'bold 10px system-ui, sans-serif';
+  ctx.textBaseline = 'middle';
+  for (const lane of [0, 1, 2] as LaneId[]) {
+    const ry = y + 8 + lane * 14;
+    ctx.fillStyle = '#ccc';
+    ctx.textAlign = 'left';
+    ctx.fillText(laneName(lane), x + 6, ry);
+    // 自軍 奥・門・手前 | 敵軍 手前・門・奥
+    const items: { t: Team; tier: 'deep' | 'front' | 'gate' }[] = [
+      { t: team, tier: 'deep' },
+      { t: team, tier: 'gate' },
+      { t: team, tier: 'front' },
+      { t: enemy, tier: 'front' },
+      { t: enemy, tier: 'gate' },
+      { t: enemy, tier: 'deep' },
+    ];
+    items.forEach((it, i) => {
+      const cx = x + 30 + i * 15 + (i >= 3 ? 6 : 0);
+      if (it.tier === 'gate') {
+        const deep = world.deepBase(it.t, lane);
+        const g = deep?.gate;
+        ctx.fillStyle = !g || !deep?.alive || g.state === 'open' ? 'rgba(255,255,255,0.25)' : g.state === 'opening' ? '#ffd23f' : '#cfd6e6';
+        ctx.fillRect(cx - 2, ry - 5, 4, 10);
+        return;
+      }
+      const b = it.tier === 'front' ? world.frontBase(it.t, lane) : world.deepBase(it.t, lane);
+      ctx.beginPath();
+      ctx.arc(cx, ry, 4.5, 0, Math.PI * 2);
+      if (b?.alive) {
+        ctx.fillStyle = teamColor(it.t);
+        ctx.fill();
+      } else {
+        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    });
+  }
+}
+
 /** チームレベルと経験値バー（左上・ソウルゲージの下）。 */
-export function drawLevel(ctx: CanvasRenderingContext2D, world: World, team: Team, _w: number) {
+export function drawLevel(ctx: CanvasRenderingContext2D, world: World, team: Team, viewH: number) {
   const p = world.progress[team];
   const ep = world.progress[(1 - team) as Team];
-  const x = 10;
-  const y = 94 + safeTop();
+  const { x, y } = hudLayout(viewH).level;
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
   ctx.beginPath();
   ctx.roundRect(x, y, 106, 34, 8);
@@ -77,13 +151,10 @@ export function drawLevel(ctx: CanvasRenderingContext2D, world: World, team: Tea
   ctx.fillRect(x + 8, y + 24, 90 * p.progress(), 5);
 }
 
-const LANE_NAME = ['左', '中央', '右'];
-
 /** ソウルゲージ（左上）。半分で次のソウルを予告（自軍のみ）。 */
-export function drawSoul(ctx: CanvasRenderingContext2D, world: World, team: Team) {
+export function drawSoul(ctx: CanvasRenderingContext2D, world: World, team: Team, viewH: number) {
   const st = world.soul.teams[team];
-  const x = 10;
-  const y = 48 + safeTop();
+  const { x, y } = hudLayout(viewH).soul;
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
   ctx.beginPath();
   ctx.roundRect(x, y, 106, 42, 8);
@@ -110,18 +181,26 @@ export function drawSoul(ctx: CanvasRenderingContext2D, world: World, team: Team
   ctx.fillStyle = '#fff';
   const a = st.announced;
   const giant = world.giants.find((g) => g.team === team);
-  const txt = giant ? `巨人出撃中(${LANE_NAME[giant.lane]})` : a ? `${a.soul.name}(${LANE_NAME[a.lane]})` : '劣勢ほど溜まる';
+  const txt = giant ? `巨人出撃中(${laneName(giant.lane)})` : a ? `${a.soul.name}(${laneName(a.lane)})` : '劣勢ほど溜まる';
   ctx.fillText(txt, x + 8, y + 30);
 }
 
-/** 自キャストの HP/MP（左下）。 */
+const BUFF_LABEL: Record<string, [string, string]> = {
+  haste: ['速', '#7CFC8A'],
+  guard: ['護', '#8fd0ff'],
+  empower: ['攻', '#ffb347'],
+  pierceUp: ['貫', '#ffd23f'],
+  slow: ['鈍', '#ff6b6b'],
+};
+
+/** 自キャストの名前・HP・MP・バフ（左下）。カードの真横に置かない。 */
 export function drawPlayerStatus(ctx: CanvasRenderingContext2D, h: Hero, viewH: number) {
-  const x = 12;
-  const y = viewH - 64 - safeBottom();
+  const x = 10;
+  const y = viewH - 62 - safeBottom();
   const w = 150;
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
   ctx.beginPath();
-  ctx.roundRect(x, y, w + 16, 52, 10);
+  ctx.roundRect(x, y, w + 16, 54, 10);
   ctx.fill();
   ctx.fillStyle = '#fff';
   ctx.font = 'bold 12px system-ui, sans-serif';
@@ -144,6 +223,18 @@ export function drawPlayerStatus(ctx: CanvasRenderingContext2D, h: Hero, viewH: 
   bar(y + 21, h.hp / h.maxHp, h.hp / h.maxHp < 0.3 ? '#ff5d5d' : '#5bd66b', `HP ${Math.ceil(h.hp)}/${h.maxHp}`);
   const maxMp = h.stat('maxMp');
   bar(y + 36, h.mp / maxMp, h.mp < h.drawCost ? '#4a5e80' : '#4fa8ff', `MP ${Math.floor(h.mp)}/${maxMp}`);
+  // バフ
+  h.buffs.forEach((b, i) => {
+    const [label, col] = BUFF_LABEL[b.kind] ?? ['?', '#fff'];
+    const bx = x + 8 + i * 22;
+    const by = y - 20;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(bx, by, 20, 17);
+    ctx.fillStyle = col;
+    ctx.font = 'bold 11px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, bx + 10, by + 9);
+  });
 }
 
 let cachedSafeBottom = -1;

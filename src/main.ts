@@ -1,12 +1,23 @@
 import { Game } from './game';
+import { tryLockLandscape } from './input/orientation';
+import { preloadAssets } from './render/assets';
 import { Renderer } from './render/renderer';
+import { updateOrientationOverlay } from './ui/orientationOverlay';
 import { spawnSquad } from './sim/minions';
 import { defaultLoadout, showTitle, type TitleResult } from './ui/screens/title';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const uiRoot = document.getElementById('ui')!;
 const renderer = new Renderer(canvas);
-window.addEventListener('resize', () => renderer.resize());
+preloadAssets();
+
+/** 向き変更・リサイズ時に land を再評価して再計算（縦画面フォールバックも維持）。 */
+function onResize() {
+  renderer.resize();
+  updateOrientationOverlay(uiRoot, !!game);
+}
+window.addEventListener('resize', onResize);
+window.addEventListener('orientationchange', () => setTimeout(onResize, 120));
 
 let game: Game | undefined;
 let lastSetup: TitleResult | undefined;
@@ -14,11 +25,13 @@ const params = new URLSearchParams(location.search);
 
 function start(setup: TitleResult) {
   lastSetup = setup;
+  void tryLockLandscape();
   game = new Game(renderer, uiRoot, { loadout: setup.loadout, difficulty: setup.difficulty, showFps: params.has('fps') }, (again) => {
     if (again && lastSetup) start(lastSetup);
     else title();
   });
   (window as any).__game = game;
+  updateOrientationOverlay(uiRoot, true);
   if (params.has('stress')) stress(game);
 }
 
@@ -38,6 +51,7 @@ function stress(g: Game) {
 
 function title() {
   game = undefined;
+  updateOrientationOverlay(uiRoot, false);
   showTitle(uiRoot, start);
 }
 
@@ -45,3 +59,4 @@ function title() {
 const quick = params.get('c');
 if (quick) start({ loadout: defaultLoadout(quick), difficulty: (params.get('d') as any) ?? 'normal' });
 else title();
+(window as any).__renderer = renderer;
