@@ -1,5 +1,5 @@
 // 拠点・城・刻の門。
-import { BASES, GATE_OPEN_SEC } from '../config/balance';
+import { BASES, GATE_OPEN_SEC, MINION } from '../config/balance';
 import { CASTLE_POS, GATE_Y, LANE_X, baseSlots } from '../config/map';
 import type { BaseDef, GateKind, LaneId, Team } from '../config/types';
 
@@ -26,6 +26,7 @@ export interface Base {
   hitFlash: number;
   /** 次の出撃までの秒数（兵士生成） */
   spawnTimer: number;
+  spawnCount: number;
   destroyedAt?: number;
 }
 
@@ -48,7 +49,8 @@ export function createBases(nextId: () => number): Base[] {
       alive: true,
       vision: 650,
       hitFlash: 0,
-      spawnTimer: 0,
+      spawnTimer: s.tier === 'front' ? MINION.frontWave.firstAt : 0,
+      spawnCount: 0,
     };
     if (s.tier === 'deep') {
       b.gate = { kind: 'none', state: 'closed', timer: 0, x: LANE_X[s.lane], y: GATE_Y[s.team] };
@@ -79,6 +81,7 @@ export function createBases(nextId: () => number): Base[] {
       vision: 800,
       hitFlash: 0,
       spawnTimer: 0,
+      spawnCount: 0,
     });
   }
   return out;

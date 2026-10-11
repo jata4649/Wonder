@@ -5,11 +5,14 @@ import { WORLD_H, WORLD_W } from '../config/map';
 import { teamColor, teamTint } from '../config/settings';
 import type { Base } from '../sim/bases';
 import type { World } from '../sim/world';
+import type { Team } from '../config/types';
 
 export class Renderer {
   ctx: CanvasRenderingContext2D;
   camera = new Camera();
   dpr = 1;
+  /** 視点のチーム（自軍） */
+  viewTeam: Team = 0;
   private bg?: HTMLCanvasElement;
 
   constructor(public canvas: HTMLCanvasElement) {
@@ -47,6 +50,64 @@ export class Renderer {
 
     this.drawDoors(world);
     for (const b of world.bases) this.drawBase(b);
+    this.drawMinions(world);
+    this.drawBolts(world);
+  }
+
+  private drawMinions(world: World) {
+    const { ctx } = this;
+    const bb = this.camera.bounds();
+    for (const m of world.minions) {
+      if (m.x < bb.x0 || m.x > bb.x1 || m.y < bb.y0 || m.y > bb.y1) continue;
+      if (!world.isVisibleTo(m, this.viewTeam)) continue;
+      const col = teamColor(m.team);
+      const forming = m.squad.formTimer > 0 && !m.ramming;
+      ctx.globalAlpha = m.downTimer > 0 ? 0.6 : 1;
+      ctx.fillStyle = m.hitFlash > 0 ? '#fff' : col;
+      ctx.beginPath();
+      if (m.big) {
+        ctx.roundRect(m.x - m.r, m.y - m.r, m.r * 2, m.r * 2, 6);
+      } else {
+        // 進行方向に尖った形
+        const f = m.team === 0 ? -1 : 1;
+        ctx.moveTo(m.x, m.y + f * m.r * 1.2);
+        ctx.lineTo(m.x + m.r, m.y - f * m.r * 0.8);
+        ctx.lineTo(m.x - m.r, m.y - f * m.r * 0.8);
+        ctx.closePath();
+      }
+      ctx.fill();
+      ctx.strokeStyle = m.ramming ? '#ffd23f' : 'rgba(0,0,0,0.55)';
+      ctx.lineWidth = m.ramming ? 4 : 2;
+      ctx.stroke();
+      if (forming) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, m.r + 6, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      if (m.hp < m.maxHp) {
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(m.x - m.r, m.y - m.r - 10, m.r * 2, 5);
+        ctx.fillStyle = '#7CFC8A';
+        ctx.fillRect(m.x - m.r, m.y - m.r - 10, (m.r * 2 * m.hp) / m.maxHp, 5);
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  private drawBolts(world: World) {
+    const { ctx } = this;
+    for (const b of world.bolts) {
+      ctx.fillStyle = teamColor(b.team);
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   private drawDoors(world: World) {
