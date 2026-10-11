@@ -1,5 +1,5 @@
-// 画面の向き。横画面（land）では縦長ワールドを90°回転して描く（SPEC 1.3）。
-// 自陣（ワールド下側 = y大）が画面の左、敵陣が右になり、レーンは左右に走る。
+// 画面の向き。ワールドは回転しない（SPEC 1.1）。横画面では縦長の盤面を
+// 「フィールド幅＝画面幅」で表示し、カメラを上下（y）に送る。自陣が下・敵陣が上、レーンは上下に走る。
 import type { LaneId } from '../config/types';
 
 export const orient = {
@@ -27,7 +27,7 @@ export async function tryLockLandscape() {
   }
 }
 
-/** レーン名：横画面ではワールド x 小→画面上 なので 上/中/下、縦画面では 左/中央/右。 */
+/** レーン名（向きに関係なく 左/中央/右）。 */
 export function laneName(lane: LaneId | number): string {
-  return (orient.land ? ['上', '中', '下'] : ['左', '中央', '右'])[lane] ?? '';
+  return ['左', '中央', '右'][lane] ?? '';
 }

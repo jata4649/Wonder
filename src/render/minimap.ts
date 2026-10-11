@@ -52,10 +52,9 @@ export class Minimap {
   }
 
   layout(viewW: number, viewH: number) {
-    // 縦画面：縦長、横画面：横長（ワールドを90°回転した写像。SPEC 1.3(d)）
-    const land = orient.land;
-    const mapW = land ? PLAY_Y1 - PLAY_Y0 : PLAY_X1 - PLAY_X0;
-    const mapH = land ? PLAY_X1 - PLAY_X0 : PLAY_Y1 - PLAY_Y0;
+    // ミニマップは常に縦長（盤面と 1:1。SPEC 1.1）
+    const mapW = PLAY_X1 - PLAY_X0;
+    const mapH = PLAY_Y1 - PLAY_Y0;
     const top = topBarHeight(viewH) + 6 + safeTop();
     if (this.expanded) {
       const maxW = viewW - 40;
@@ -64,9 +63,10 @@ export class Minimap {
       const w = mapW * k;
       const h = mapH * k;
       this.rect = { x: (viewW - w) / 2, y: (viewH - h) / 2, w, h };
-    } else if (land) {
-      const w = Math.min(176, viewW * 0.2);
-      const h = (w * mapH) / mapW;
+    } else if (orient.land) {
+      // 横画面：縦の余白が少ないので高さで決める（例 88×132 前後）
+      const h = Math.min(170, (viewH - top) * 0.46);
+      const w = (h * mapW) / mapH;
       this.rect = { x: viewW - w - 8, y: top, w, h };
     } else {
       const w = Math.min(100, viewW * 0.26);
@@ -103,8 +103,8 @@ export class Minimap {
   draw(ctx: CanvasRenderingContext2D, world: World, team: Team, camera: Camera, playerId: number) {
     this.layout(camera.viewW, camera.viewH);
     const { x, y, w, h } = this.rect;
-    const land = orient.land;
-    // ワールド→ミニマップ。横画面では mx=(H-wy), my=wx の回転写像
+    const land = false; // 回転しない（SPEC 1.1）
+    // ワールド→ミニマップ
     const kx = land ? w / (PLAY_Y1 - PLAY_Y0) : w / (PLAY_X1 - PLAY_X0);
     const ky = land ? h / (PLAY_X1 - PLAY_X0) : h / (PLAY_Y1 - PLAY_Y0);
     const P = (wx: number, wy: number) =>

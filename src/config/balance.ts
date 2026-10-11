@@ -140,8 +140,8 @@ export const CROSS = {
 
 export const CAMERA = {
   viewWorldMin: 900, // 縦画面：画面短辺に映る世界の幅
-  landAcross: 1000, // 横画面：画面の高さに映る世界の幅（レーン横断方向）
-  landAlong: 1900, // 横画面：画面の幅に映る世界の長さ（レーン方向）
+  landSideMargin: 20, // 横画面：フィールド幅＝画面幅にするときの左右の余白（世界px）
+  landLookAhead: 0.12, // 横画面：自キャストを画面中央よりこの割合だけ下に置く
   manualReturnSec: 3,
   followLerp: 8,
 };

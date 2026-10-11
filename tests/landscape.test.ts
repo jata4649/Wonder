@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { CASTERS, CASTER_BY_ID } from '../src/config/casters';
-import { CASTLE_POS, LANE_X } from '../src/config/map';
+import { CASTLE_POS, LANE_X, PLAY_X0, PLAY_X1 } from '../src/config/map';
 import { MINION } from '../src/config/balance';
 import { orient } from '../src/input/orientation';
 import { DrawGesture } from '../src/input/drawGesture';
@@ -23,23 +23,35 @@ afterEach(() => {
   orient.land = false;
 });
 
-describe('M0 横画面の座標変換', () => {
-  it('自城が画面左・敵城が画面右、レーンは左右に走る（上中下に並ぶ）', () => {
+describe('M0 横画面（縦長盤面のまま・回転しない）', () => {
+  it('3本の縦レーンが左・中央・右に並び、自陣が下・敵陣が上', () => {
     const c = landCam();
-    c.scale = 844 / 3600;
+    c.y = 1800;
     const own = c.worldToScreen(CASTLE_POS[0].x, CASTLE_POS[0].y);
     const enemy = c.worldToScreen(CASTLE_POS[1].x, CASTLE_POS[1].y);
-    expect(own.x).toBeLessThan(enemy.x);
-    expect(Math.abs(own.y - enemy.y)).toBeLessThan(1);
-    // レーン（x一定）は画面上で y 一定＝水平線
+    expect(own.y).toBeGreaterThan(enemy.y);
+    expect(Math.abs(own.x - enemy.x)).toBeLessThan(1e-6);
+    // レーン（x一定）は画面上で x 一定＝垂直線
     const a = c.worldToScreen(LANE_X[0], 500);
     const b = c.worldToScreen(LANE_X[0], 3000);
-    expect(Math.abs(a.y - b.y)).toBeLessThan(1e-6);
-    const top = c.worldToScreen(LANE_X[0], 1800).y;
-    const mid = c.worldToScreen(LANE_X[1], 1800).y;
-    const bot = c.worldToScreen(LANE_X[2], 1800).y;
-    expect(top).toBeLessThan(mid);
-    expect(mid).toBeLessThan(bot);
+    expect(Math.abs(a.x - b.x)).toBeLessThan(1e-6);
+    const l = c.worldToScreen(LANE_X[0], 1800).x;
+    const m = c.worldToScreen(LANE_X[1], 1800).x;
+    const r = c.worldToScreen(LANE_X[2], 1800).x;
+    expect(l).toBeLessThan(m);
+    expect(m).toBeLessThan(r);
+  });
+
+  it('フィールド幅＝画面幅：3レーンとも常に画面内（黒帯なし）', () => {
+    const c = landCam();
+    const left = c.worldToScreen(PLAY_X0, 1800).x;
+    const right = c.worldToScreen(PLAY_X1, 1800).x;
+    expect(left).toBeGreaterThanOrEqual(0);
+    expect(right).toBeLessThanOrEqual(844);
+    expect(right - left).toBeGreaterThan(844 * 0.95);
+    // 自キャストが端レーンにいても x は動かない
+    c.follow(LANE_X[0], 2000, 1, 0);
+    expect(c.x).toBe(Camera.FIELD_CX);
   });
 
   it('画面↔ワールド変換は往復で一致', () => {
@@ -50,42 +62,29 @@ describe('M0 横画面の座標変換', () => {
       [300, 120],
     ]) {
       const w = c.screenToWorld(sx, sy);
-      const s = c.worldToScreen(w.x, w.y);
-      expect(s.x).toBeCloseTo(sx, 6);
-      expect(s.y).toBeCloseTo(sy, 6);
+      const s2 = c.worldToScreen(w.x, w.y);
+      expect(s2.x).toBeCloseTo(sx, 6);
+      expect(s2.y).toBeCloseTo(sy, 6);
     }
   });
 
-  it('スティックを上に倒すと画面の上へ移動する（90°ずれない）', () => {
+  it('スティックを上に倒すと画面の上（敵陣方向）へ移動する', () => {
     const c = landCam();
     const d = c.screenDirToWorld(0, -1);
-    const p0 = c.worldToScreen(1200, 1800);
-    const p1 = c.worldToScreen(1200 + d.x * 10, 1800 + d.y * 10);
-    expect(p1.y).toBeLessThan(p0.y);
-    expect(Math.abs(p1.x - p0.x)).toBeLessThan(1e-6);
-    // 右に倒すと画面の右（＝敵陣方向）
-    const r = c.screenDirToWorld(1, 0);
-    expect(r.y).toBeLessThan(0);
+    expect(d).toEqual({ x: 0, y: -1 });
+    expect(c.up).toEqual({ x: 0, y: -1 });
   });
 
-  it('2本指パンはドラッグ方向どおりに盤面が動く', () => {
+  it('2本指パンは縦送り（ドラッグ方向どおり）', () => {
     const c = landCam();
     const p0 = c.worldToScreen(1300, 1900);
     c.pan(40, -25, 0);
     const p1 = c.worldToScreen(1300, 1900);
-    expect(p1.x - p0.x).toBeCloseTo(40, 6);
+    expect(p1.x - p0.x).toBeCloseTo(0, 6); // 横には動かない
     expect(p1.y - p0.y).toBeCloseTo(-25, 6);
   });
 
-  it('視野の計算を向きで切り替える', () => {
-    const c = landCam();
-    const bb = c.bounds(0);
-    // 横画面：画面の幅（844）はワールドの y 方向
-    expect((bb.y1 - bb.y0) * c.scale).toBeCloseTo(844, 3);
-    expect((bb.x1 - bb.x0) * c.scale).toBeCloseTo(390, 3);
-  });
-
-  it('正立キュー：文字とバーはスクリーン空間で描かれる（回転なし）', () => {
+  it('正立キュー：文字とバーはスクリーン空間で描かれる', () => {
     const c = landCam();
     const q = new UprightQueue();
     q.text(1200, 1800, '刹那門 開門 12s', { size: 20, dy: 10 });
