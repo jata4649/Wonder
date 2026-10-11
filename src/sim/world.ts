@@ -5,6 +5,7 @@ import type { Team } from '../config/types';
 import { createBases, startGateOpening, updateGate, type Base } from './bases';
 import type { DamageSource, HitOpts } from './combat';
 import { dist2, makeRng, type Rng } from './geom';
+import { MatchState } from './gauge';
 import { SpatialGrid } from './grid';
 import { updateSpawns, updateSquads } from './minions';
 import { makeBolt, updateBolts, type Bolt } from './projectiles/bolt';
@@ -30,6 +31,7 @@ export class World {
   bolts: Bolt[] = [];
   grid = new SpatialGrid<Mob>();
   events: GameEvent[] = [];
+  match = new MatchState();
   spawnTimers: [{ castle: number }, { castle: number }] = [
     { castle: MINION.castleWave.firstAt },
     { castle: MINION.castleWave.firstAt },
@@ -111,6 +113,7 @@ export class World {
     m.downTimer = Math.max(m.downTimer, dur);
   }
   onBaseDamaged(b: Base, dealt: number, src: DamageSource) {
+    this.match.onBaseDamaged(b, dealt);
     if (dealt > 0) this.emit({ type: 'damage', x: b.x, y: b.y - b.r, amount: dealt, team: src.team, big: true });
   }
   onMinionRammed(m: Minion, _b: Base) {
@@ -133,11 +136,18 @@ export class World {
       const deep = this.deepBase(b.team, b.lane);
       if (deep) startGateOpening(deep);
     }
+    this.match.onBaseDestroyed(b);
     this.emit({ type: 'baseDestroyed', base: b, by: src?.team ?? ((1 - b.team) as Team) });
   }
 
+  get ended() {
+    return this.match.result !== null;
+  }
+
   step(dt = MATCH.fixedDt) {
+    if (this.ended) return;
     this.time += dt;
+    this.match.tick(dt);
     this.grid.rebuild(this.mobs());
     updateSpawns(this, dt);
     for (const m of this.minions) {

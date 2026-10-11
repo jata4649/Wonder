@@ -1,12 +1,15 @@
 import { Renderer } from './render/renderer';
 import { World } from './sim/world';
+import { showResult } from './ui/result';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
-const world = new World({ seed: Date.now() & 0xffff });
+const uiRoot = document.getElementById('ui')!;
+let world = new World({ seed: Date.now() & 0xffff });
 const renderer = new Renderer(canvas);
 window.addEventListener('resize', () => renderer.resize());
+let resultShown = false;
 
-// M1: ドラッグで盤面を見回す（デバッグ）
+// M1-M3: ドラッグで盤面を見回す（デバッグ）
 let drag: { id: number; x: number; y: number } | null = null;
 canvas.addEventListener('pointerdown', (e) => (drag = { id: e.pointerId, x: e.clientX, y: e.clientY }));
 canvas.addEventListener('pointermove', (e) => {
@@ -16,14 +19,6 @@ canvas.addEventListener('pointermove', (e) => {
   drag.y = e.clientY;
 });
 canvas.addEventListener('pointerup', () => (drag = null));
-window.addEventListener('keydown', (e) => {
-  // デバッグ：1/2/3 で敵の手前拠点を破壊、Shift+1/2/3 で自軍側
-  const lane = Number(e.key) - 1;
-  if (lane >= 0 && lane <= 2) {
-    const b = world.frontBase(e.shiftKey ? 0 : 1, lane);
-    if (b) world.destroyBase(b);
-  }
-});
 
 let last = performance.now();
 let acc = 0;
@@ -35,8 +30,15 @@ function frame(now: number) {
     world.step(1 / 60);
     acc -= 1 / 60;
   }
-  if (world.wallsDirty) {
-    world.wallsDirty = false;
+  world.drainEvents();
+  if (world.wallsDirty) world.wallsDirty = false;
+  if (world.ended && !resultShown) {
+    resultShown = true;
+    showResult(uiRoot, world, () => {
+      world = new World({ seed: Date.now() & 0xffff });
+      resultShown = false;
+      (window as any).__world = world;
+    });
   }
   renderer.camera.update(dt);
   renderer.render(world);

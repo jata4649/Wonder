@@ -1,6 +1,7 @@
 // Canvas2D レンダラ。World を読むだけで、World を書き換えない。
 import { renderBackground } from './background';
 import { Camera } from './camera';
+import { drawTopBar } from './hud';
 import { WORLD_H, WORLD_W } from '../config/map';
 import { teamColor, teamTint } from '../config/settings';
 import type { Base } from '../sim/bases';
@@ -52,6 +53,10 @@ export class Renderer {
     for (const b of world.bases) this.drawBase(b);
     this.drawMinions(world);
     this.drawBolts(world);
+
+    // HUD（画面座標）
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    drawTopBar(ctx, world, this.camera.viewW);
   }
 
   private drawMinions(world: World) {
