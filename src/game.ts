@@ -39,7 +39,17 @@ export class Game {
     this.world = new World({ seed: opts.seed ?? (Date.now() & 0xffff) });
     this.player = setupMatch(this.world, opts.loadout, opts.difficulty).player!;
     this.input = new InputManager(renderer.canvas, renderer.camera, () => this.player, () => this.world);
-    this.controls = new Controls(uiRoot, this.input, () => this.player);
+    this.controls = new Controls(uiRoot, this.input, () => this.player, (kind, x, y) => this.world.addPing(0, kind, x, y));
+    // ミニマップ：タップで拡大／戻す（拡大中は画面のどこをタップしても戻す）
+    const mm = renderer.minimap;
+    mm.expanded = false;
+    this.input.uiHitTest = (sx, sy) => {
+      if (mm.expanded || mm.hit(sx, sy)) {
+        mm.toggle();
+        return true;
+      }
+      return false;
+    };
     this.cards = new Cards(uiRoot, this.player, () => this.world);
     renderer.camera.x = this.player.x;
     renderer.camera.y = this.player.y;

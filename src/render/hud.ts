@@ -2,6 +2,7 @@
 import { MATCH } from '../config/balance';
 import { teamColor } from '../config/settings';
 import type { Team } from '../config/types';
+import type { Hero } from '../sim/units/hero';
 import type { World } from '../sim/world';
 
 export function fmtTime(sec: number) {
@@ -60,7 +61,7 @@ export function drawLevel(ctx: CanvasRenderingContext2D, world: World, team: Tea
   const y = 94 + safeTop();
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
   ctx.beginPath();
-  ctx.roundRect(x, y, 128, 34, 8);
+  ctx.roundRect(x, y, 106, 34, 8);
   ctx.fill();
   ctx.fillStyle = '#ffd23f';
   ctx.font = '900 16px system-ui, sans-serif';
@@ -69,11 +70,11 @@ export function drawLevel(ctx: CanvasRenderingContext2D, world: World, team: Tea
   ctx.fillText(`Lv${p.level}`, x + 8, y + 13);
   ctx.fillStyle = 'rgba(255,255,255,0.6)';
   ctx.font = '11px system-ui, sans-serif';
-  ctx.fillText(`敵Lv${ep.level}`, x + 76, y + 13);
+  ctx.fillText(`敵Lv${ep.level}`, x + 60, y + 13);
   ctx.fillStyle = 'rgba(255,255,255,0.15)';
-  ctx.fillRect(x + 8, y + 24, 112, 5);
+  ctx.fillRect(x + 8, y + 24, 90, 5);
   ctx.fillStyle = '#7cf0ff';
-  ctx.fillRect(x + 8, y + 24, 112 * p.progress(), 5);
+  ctx.fillRect(x + 8, y + 24, 90 * p.progress(), 5);
 }
 
 const LANE_NAME = ['左', '中央', '右'];
@@ -85,7 +86,7 @@ export function drawSoul(ctx: CanvasRenderingContext2D, world: World, team: Team
   const y = 48 + safeTop();
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
   ctx.beginPath();
-  ctx.roundRect(x, y, 128, 42, 8);
+  ctx.roundRect(x, y, 106, 42, 8);
   ctx.fill();
   ctx.fillStyle = '#d9b3ff';
   ctx.font = 'bold 12px system-ui, sans-serif';
@@ -94,21 +95,62 @@ export function drawSoul(ctx: CanvasRenderingContext2D, world: World, team: Team
   ctx.fillText('ソウル', x + 8, y + 11);
   const frac = st.gauge / 100;
   ctx.fillStyle = 'rgba(255,255,255,0.15)';
-  ctx.fillRect(x + 50, y + 6, 70, 10);
-  const grad = ctx.createLinearGradient(x + 50, 0, x + 120, 0);
+  ctx.fillRect(x + 48, y + 6, 50, 10);
+  const grad = ctx.createLinearGradient(x + 48, 0, x + 98, 0);
   grad.addColorStop(0, '#9b5cff');
   grad.addColorStop(1, '#ff7ad9');
   ctx.fillStyle = grad;
-  ctx.fillRect(x + 50, y + 6, 70 * frac, 10);
+  ctx.fillRect(x + 48, y + 6, 50 * frac, 10);
   ctx.strokeStyle = 'rgba(255,255,255,0.5)';
   ctx.beginPath();
-  ctx.moveTo(x + 85, y + 4);
-  ctx.lineTo(x + 85, y + 18);
+  ctx.moveTo(x + 73, y + 4);
+  ctx.lineTo(x + 73, y + 18);
   ctx.stroke();
-  ctx.font = '11px system-ui, sans-serif';
+  ctx.font = '10px system-ui, sans-serif';
   ctx.fillStyle = '#fff';
   const a = st.announced;
   const giant = world.giants.find((g) => g.team === team);
-  const txt = giant ? `巨人 出撃中（${LANE_NAME[giant.lane]}）` : a ? `次: ${a.soul.name}（${LANE_NAME[a.lane]}）` : '劣勢ほど溜まる';
+  const txt = giant ? `巨人出撃中(${LANE_NAME[giant.lane]})` : a ? `${a.soul.name}(${LANE_NAME[a.lane]})` : '劣勢ほど溜まる';
   ctx.fillText(txt, x + 8, y + 30);
+}
+
+/** 自キャストの HP/MP（左下）。 */
+export function drawPlayerStatus(ctx: CanvasRenderingContext2D, h: Hero, viewH: number) {
+  const x = 12;
+  const y = viewH - 64 - safeBottom();
+  const w = 150;
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.beginPath();
+  ctx.roundRect(x, y, w + 16, 52, 10);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 12px system-ui, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(h.def.name, x + 8, y + 10);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#aaa';
+  ctx.fillText(h.alive ? `K${h.kills} / D${h.deaths}` : `復活まで ${Math.ceil(h.respawnTimer)}`, x + w + 8, y + 10);
+  const bar = (by: number, frac: number, col: string, label: string) => {
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(x + 8, by, w, 11);
+    ctx.fillStyle = col;
+    ctx.fillRect(x + 8, by, w * Math.max(0, Math.min(1, frac)), 11);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 10px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(label, x + 12, by + 6);
+  };
+  bar(y + 21, h.hp / h.maxHp, h.hp / h.maxHp < 0.3 ? '#ff5d5d' : '#5bd66b', `HP ${Math.ceil(h.hp)}/${h.maxHp}`);
+  const maxMp = h.stat('maxMp');
+  bar(y + 36, h.mp / maxMp, h.mp < h.drawCost ? '#4a5e80' : '#4fa8ff', `MP ${Math.floor(h.mp)}/${maxMp}`);
+}
+
+let cachedSafeBottom = -1;
+export function safeBottom() {
+  if (cachedSafeBottom < 0) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue('--sab');
+    cachedSafeBottom = parseInt(v) || 0;
+  }
+  return cachedSafeBottom;
 }

@@ -1,7 +1,8 @@
 // Canvas2D レンダラ。World を読むだけで、World を書き換えない。
 import { renderBackground } from './background';
 import { Camera } from './camera';
-import { drawLevel, drawSoul, drawTopBar } from './hud';
+import { drawLevel, drawPlayerStatus, drawSoul, drawTopBar } from './hud';
+import { Minimap } from './minimap';
 import { WORLD_H, WORLD_W } from '../config/map';
 import { teamColor, teamTint } from '../config/settings';
 import type { Base } from '../sim/bases';
@@ -22,6 +23,7 @@ export interface RenderView {
 export class Renderer {
   ctx: CanvasRenderingContext2D;
   camera = new Camera();
+  minimap = new Minimap();
   dpr = 1;
   /** 視点のチーム（自軍） */
   viewTeam: Team = 0;
@@ -72,6 +74,7 @@ export class Renderer {
     this.drawDrawShots(world);
     this.drawLobShells(world);
     view.fx?.draw(ctx);
+    this.drawPings(world);
     if (view.player && view.input) this.drawStance(view.player, view.input);
 
     // HUD（画面座標）
@@ -80,7 +83,9 @@ export class Renderer {
     drawTopBar(ctx, world, this.camera.viewW);
     drawSoul(ctx, world, this.viewTeam);
     drawLevel(ctx, world, this.viewTeam, this.camera.viewW);
+    if (view.player) drawPlayerStatus(ctx, view.player, this.camera.viewH);
     if (view.input) this.drawStick(view.input);
+    this.minimap.draw(ctx, world, this.viewTeam, this.camera, view.player?.id ?? -1);
     if (view.player?.notice) this.drawNotice(view.player.notice.text);
     view.fx?.drawScreen(ctx, this.camera.viewW, this.camera.viewH);
   }
@@ -103,6 +108,27 @@ export class Renderer {
       ctx.fill();
     }
     ctx.globalAlpha = 1;
+  }
+
+  private drawPings(world: World) {
+    const { ctx } = this;
+    const icon: Record<string, string> = { gather: '集合', retreat: '退却', caution: '注意', enemy: '敵' };
+    for (const p of world.pings) {
+      if (p.team !== this.viewTeam) continue;
+      const k = (p.t % 1) / 1;
+      ctx.strokeStyle = '#ffd23f';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 40 + 40 * (1 - k), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(p.x - 40, p.y - 110, 80, 34);
+      ctx.fillStyle = '#ffd23f';
+      ctx.font = '900 24px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(icon[p.kind], p.x, p.y - 93);
+    }
   }
 
   private drawGiants(world: World) {

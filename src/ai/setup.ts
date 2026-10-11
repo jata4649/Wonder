@@ -37,12 +37,35 @@ export class AIDirector {
   ) {}
 
   update(dt: number) {
+    this.handlePings();
     this.reassignT -= dt;
     if (this.reassignT <= 0) {
       this.reassignT = 12;
       this.reassign();
     }
     for (const ai of this.ais) ai.update(dt);
+  }
+
+  private seenPings = new Set<string>();
+  /** プレイヤーのピングに味方AIが反応する。 */
+  private handlePings() {
+    for (const p of this.world.pings) {
+      const key = `${p.team}:${p.kind}:${Math.round(p.x)}:${Math.round(p.y)}`;
+      if (this.seenPings.has(key)) continue;
+      this.seenPings.add(key);
+      const allies = this.ais.filter((a) => a.hero.team === p.team && a.hero.alive);
+      if (p.kind === 'gather') {
+        // 近い味方2人がピングのレーンへ
+        const lane = nearestLane(p.x) as LaneId;
+        allies
+          .sort((a, b) => Math.hypot(a.hero.x - p.x, a.hero.y - p.y) - Math.hypot(b.hero.x - p.x, b.hero.y - p.y))
+          .slice(0, 2)
+          .forEach((a) => a.focusLane(lane, 15));
+      } else if (p.kind === 'retreat') {
+        for (const a of allies) if (Math.hypot(a.hero.x - p.x, a.hero.y - p.y) < 1200 && a.hero.hp / a.hero.maxHp < 0.75) a.mode = 'retreat';
+      }
+    }
+    if (this.seenPings.size > 200) this.seenPings.clear();
   }
 
   /** レーン割り当て（プレイヤーのいるレーンは固定として扱う）。 */
@@ -57,7 +80,7 @@ export class AIDirector {
       const asg = assignLanes(input);
       for (const ai of this.ais) {
         const a = asg.get(ai.hero.id);
-        if (a && ai.hero.team === team) {
+        if (a && ai.hero.team === team && !ai.focusing) {
           ai.lane = a.lane;
           ai.roam = a.roam;
           ai.hero.lane = a.lane;

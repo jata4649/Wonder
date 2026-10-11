@@ -41,7 +41,17 @@ export type GameEvent =
   | { type: 'levelUp'; team: Team; level: number }
   | { type: 'soulAnnounce'; team: Team; soul: SoulDef; lane: LaneId }
   | { type: 'giantSummon'; giant: Giant }
-  | { type: 'giantKilled'; giant: Giant };
+  | { type: 'giantKilled'; giant: Giant }
+  | { type: 'ping'; team: Team; kind: PingKind; x: number; y: number };
+
+export type PingKind = 'gather' | 'retreat' | 'caution' | 'enemy';
+export interface Ping {
+  team: Team;
+  kind: PingKind;
+  x: number;
+  y: number;
+  t: number;
+}
 
 export interface CrossResult {
   crossed: boolean;
@@ -69,6 +79,7 @@ export class World {
   orbs: XpOrb[] = [];
   giants: Giant[] = [];
   soul = new SoulSystem();
+  pings: Ping[] = [];
   /** AI など、毎ティック sim の前に動くもの */
   controllers: { update(dt: number): void }[] = [];
   /** 巨人召喚時の一時停止（秒） */
@@ -129,6 +140,12 @@ export class World {
     yield* this.minions;
     yield* this.heroes;
     yield* this.giants;
+  }
+
+  addPing(team: Team, kind: PingKind, x: number, y: number) {
+    this.pings = this.pings.filter((p) => !(p.team === team && p.kind === kind));
+    this.pings.push({ team, kind, x, y, t: 4 });
+    this.emit({ type: 'ping', team, kind, x, y });
   }
 
   summonGiant(team: Team, lane: LaneId, soul: SoulDef): Giant {
@@ -322,6 +339,8 @@ export class World {
     updateLobs(this, this.lobs, dt);
     updateStraightShots(this, this.straightShots, dt);
     updateOrbs(this, dt);
+    for (const p of this.pings) p.t -= dt;
+    if (this.pings.length) this.pings = this.pings.filter((p) => p.t > 0);
     this.bolts = this.bolts.filter((b) => b.alive);
     this.drawShots = this.drawShots.filter((p) => p.alive);
     this.lobs = this.lobs.filter((p) => p.alive);

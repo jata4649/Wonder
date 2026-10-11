@@ -27,6 +27,19 @@ export function showResult(root: HTMLElement, world: World, onRetry: () => void,
         ${row('与ゲージ(拠点/城ダメ)', st.gaugeFrom[0].damage.toFixed(1), st.gaugeFrom[1].damage.toFixed(1))}
         ${row('与ゲージ(撃破)', st.gaugeFrom[0].kill.toFixed(1), st.gaugeFrom[1].kill.toFixed(1))}
       </table>
+      <table class="stats heroes">
+        <tr><th>キャスト</th><th>撃破</th><th>撤退</th><th></th><th>キャスト</th><th>撃破</th><th>撤退</th></tr>
+        ${[0, 1, 2, 3]
+          .map((i) => {
+            const a = world.heroes.filter((h) => h.team === 0)[i];
+            const b = world.heroes.filter((h) => h.team === 1)[i];
+            const cell = (h: typeof a) =>
+              h ? `<td>${h.isPlayer ? '★' : ''}${h.def.name}</td><td>${h.kills}</td><td>${h.deaths}</td>` : '<td></td><td></td><td></td>';
+            return `<tr>${cell(a)}<td></td>${cell(b)}</tr>`;
+          })
+          .join('')}
+      </table>
+      <p class="sub">チームレベル 自軍Lv${world.progress[0].level} / 敵軍Lv${world.progress[1].level}</p>
       <div class="buttons">
         <button class="btn primary" data-act="retry">もう一度</button>
         ${onTitle ? '<button class="btn" data-act="title">タイトルへ</button>' : ''}

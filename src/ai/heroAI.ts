@@ -13,7 +13,7 @@ import type { Minion, Mob } from '../sim/units/types';
 import type { World } from '../sim/world';
 import { nextWaypoint } from './nav';
 
-type Mode = 'lane' | 'retreat' | 'giant' | 'gank';
+export type Mode = 'lane' | 'retreat' | 'giant' | 'gank';
 
 export class HeroAI {
   mode: Mode = 'lane';
@@ -28,6 +28,7 @@ export class HeroAI {
   private giant?: Giant;
   private gankTarget?: Hero;
   private strafe = 0;
+  private focusT = 0;
   readonly cfg: (typeof AI_DIFFICULTY)[Difficulty];
 
   constructor(
@@ -44,8 +45,19 @@ export class HeroAI {
     this.thinkT = world.rng.range(0, this.cfg.reaction);
   }
 
+  /** ピング「集合」などで一時的に担当レーンを変える。 */
+  focusLane(lane: LaneId, sec: number) {
+    this.lane = lane;
+    this.hero.lane = lane;
+    this.focusT = sec;
+  }
+  get focusing() {
+    return this.focusT > 0;
+  }
+
   update(dt: number) {
     const h = this.hero;
+    if (this.focusT > 0) this.focusT -= dt;
     if (!h.alive) {
       this.mode = 'lane';
       return;

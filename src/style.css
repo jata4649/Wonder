@@ -72,3 +72,10 @@ html, body {
 .buttons.sticky { position: sticky; bottom: 0; background: #1d2230; padding: 12px 0 14px; margin-top: 12px; }
 .howto { font-size: 13px; margin: 0 0 16px; opacity: 0.85; }
 .howto ul { padding-left: 18px; margin: 6px 0; line-height: 1.6; }
+.pings { position: fixed; top: calc(48px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+  display: flex; gap: 4px; pointer-events: none; }
+.ping { pointer-events: auto; width: 36px; height: 30px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4);
+  background: rgba(30,36,52,0.75); color: #ffd23f; font-size: 12px; font-weight: bold; padding: 0; touch-action: none; }
+.ping:active { background: #ffd23f; color: #222; }
+.stats.heroes { margin-top: 12px; font-size: 12px; }
+.stats.heroes td { padding: 4px 2px; }
