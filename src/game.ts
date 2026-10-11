@@ -1,16 +1,18 @@
 // 1試合ぶんのセッション：World・入力・描画・UI をまとめる。
 import { MATCH } from './config/balance';
-import type { Loadout } from './config/types';
+import type { Difficulty, Loadout } from './config/types';
 import { InputManager } from './input/touch';
 import { Effects } from './render/effects';
 import type { Renderer } from './render/renderer';
 import type { Hero } from './sim/units/hero';
 import { World } from './sim/world';
+import { Cards } from './ui/cards';
 import { Controls } from './ui/controls';
 import { showResult } from './ui/result';
 
 export interface GameOptions {
   loadout: Loadout;
+  difficulty: Difficulty;
   seed?: number;
 }
 
@@ -20,6 +22,7 @@ export class Game {
   input: InputManager;
   fx = new Effects();
   controls: Controls;
+  cards: Cards;
   private acc = 0;
   private last = performance.now();
   private raf = 0;
@@ -36,6 +39,7 @@ export class Game {
     this.player = this.world.addHero(opts.loadout, 0, true, 1);
     this.input = new InputManager(renderer.canvas, renderer.camera, () => this.player, () => this.world);
     this.controls = new Controls(uiRoot, this.input, () => this.player);
+    this.cards = new Cards(uiRoot, this.player, () => this.world);
     renderer.camera.x = this.player.x;
     renderer.camera.y = this.player.y;
     renderer.invalidateBackground();
@@ -65,6 +69,7 @@ export class Game {
     cam.update(dt);
     this.renderer.render(w, { player: this.player, input: this.input, fx: this.fx });
     this.controls.update();
+    this.cards.update();
     if (w.ended && !this.resultShown) {
       this.resultShown = true;
       this.input.enabled = false;
@@ -77,6 +82,7 @@ export class Game {
     this.running = false;
     cancelAnimationFrame(this.raf);
     this.controls.destroy();
+    this.cards.destroy();
     this.input.enabled = false;
     this.onExit(again);
   }

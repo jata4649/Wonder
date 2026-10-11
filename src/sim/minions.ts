@@ -64,6 +64,8 @@ export function spawnSquad(world: World, team: Team, lane: LaneId, source: Squad
       pierceResist: big ? MINION.pierceResistBig : 0,
       hitFlash: 0,
       revealTimer: 0,
+      slowT: 0,
+      slowMult: 1,
       big,
       squad: sq,
       slot: i,
@@ -194,7 +196,9 @@ function updateSquad(world: World, sq: Squad, dt: number) {
 
   // ④ 前進
   sq.state = obj.kind === 'gate' ? 'wait' : 'advance';
-  const sp = sq.speed * (anyRecognized ? 0.8 : 1) * dt;
+  let slow = 1;
+  for (const m of sq.members) if (m.slowT > 0) slow = Math.min(slow, m.slowMult);
+  const sp = sq.speed * slow * (anyRecognized ? 0.8 : 1) * dt;
   let tx = LANE_X[sq.lane];
   let ty: number;
   if (obj.kind === 'gate') ty = obj.stopY;

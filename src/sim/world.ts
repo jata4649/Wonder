@@ -1,12 +1,14 @@
 // シミュレーション本体。描画から独立しており、ヘッドレスでも動く。
-import { HERO, MATCH, MINION } from '../config/balance';
+import { HERO, MATCH, MINION, XP } from '../config/balance';
 import { CASTER_BY_ID } from '../config/casters';
 import { LANE_WIDTH, buildWalls, forestAt, type Rect, type WallDef } from '../config/map';
-import type { Loadout, StatKey, Team } from '../config/types';
+import { ASSIST_BY_ID, SOUL_BY_ID } from '../config/assists';
+import type { Loadout, SkillDef, StatKey, Team } from '../config/types';
 import { createBases, startGateOpening, updateGate, type Base } from './bases';
 import type { DamageSource, HitOpts } from './combat';
 import { dist2, makeRng, type Rng } from './geom';
 import { MatchState } from './gauge';
+import { castSkill, castWonder } from './effects';
 import { SpatialGrid } from './grid';
 import { updateSpawns, updateSquads } from './minions';
 import { makeBolt, updateBolts, type Bolt } from './projectiles/bolt';
@@ -29,7 +31,10 @@ export type GameEvent =
   | { type: 'blast'; x: number; y: number; r: number; team: Team }
   | { type: 'sweep'; x: number; y: number; dx: number; dy: number; team: Team }
   | { type: 'heroKilled'; hero: Hero; by: DamageSource }
-  | { type: 'chain'; hero: Hero; count: number; xp: number };
+  | { type: 'chain'; hero: Hero; count: number; xp: number }
+  | { type: 'heal'; x: number; y: number; amount: number; team: Team }
+  | { type: 'skill'; hero: Hero; skill: SkillDef }
+  | { type: 'wonder'; hero: Hero };
 
 export interface CrossResult {
   crossed: boolean;
@@ -121,11 +126,29 @@ export class World {
   teamLevel(_team: Team): number {
     return 1;
   }
-  statMods(_h: Hero, _key: StatKey): number {
-    return 0;
+  /** アシスト（チームレベル到達で発動、4枠目は Lv6 以上）とソウルの補正合計。 */
+  statMods(h: Hero, key: StatKey): number {
+    const lv = this.teamLevel(h.team);
+    let sum = 0;
+    h.loadout.assistIds.forEach((id, i) => {
+      const a = ASSIST_BY_ID[id];
+      if (!a || !assistActive(a.requiredLevel, i, lv)) return;
+      sum += a.mods[key] ?? 0;
+    });
+    const soul = SOUL_BY_ID[h.loadout.soulId];
+    if (soul?.mods) sum += soul.mods[key] ?? 0;
+    return sum;
   }
-  castSkill(_h: Hero, _slot: number, _x: number, _y: number) {}
-  castWonder(_h: Hero, _x: number, _y: number) {}
+  castSkill(h: Hero, slot: number, x: number, y: number) {
+    castSkill(this, h, slot, x, y);
+  }
+  castWonder(h: Hero, x: number, y: number) {
+    castWonder(this, h, x, y);
+  }
+  slowMob(m: Mob, mult: number, dur: number) {
+    m.slowMult = Math.min(m.slowT > 0 ? m.slowMult : 1, mult);
+    m.slowT = Math.max(m.slowT, dur);
+  }
   onChainBonus(h: Hero, count: number, xp: number) {
     this.emit({ type: 'chain', hero: h, count, xp });
   }
@@ -245,6 +268,7 @@ export class World {
       if (m.downTimer > 0) m.downTimer -= dt;
       if (m.hitFlash > 0) m.hitFlash -= dt;
       if (m.revealTimer > 0) m.revealTimer -= dt;
+      if (m.slowT > 0) m.slowT -= dt;
     }
     updateSquads(this, dt);
     for (const h of this.heroes) h.update(dt);
@@ -282,4 +306,10 @@ export class World {
     });
     return best;
   }
+}
+
+/** アシストが発動しているか。index 3（4枠目）は Lv6 以上が条件。 */
+export function assistActive(requiredLevel: number, slotIndex: number, teamLevel: number): boolean {
+  if (slotIndex >= 3 && teamLevel < XP.assistLv4Slot) return false;
+  return teamLevel >= requiredLevel;
 }

@@ -1,7 +1,7 @@
 // キャスト（プレイヤー・AI共通）。入力は Command として受け取り、sim 側で検証して実行する。
 import { CHAIN, HERO, MINION } from '../../config/balance';
 import { CASTLE_POS, forwardSign } from '../../config/map';
-import type { CasterDef, Loadout, StatKey, Team } from '../../config/types';
+import type { CasterDef, Loadout, SkillDef, StatKey, Team } from '../../config/types';
 import { damageBase, damageMob, type DamageSource } from '../combat';
 import { dist, dist2, pushOutOfRect, type Vec } from '../geom';
 import {
@@ -42,8 +42,12 @@ export class Hero implements Mob, DSOwner {
   pierceResist = 0;
   hitFlash = 0;
   revealTimer = 0;
+  slowT = 0;
+  slowMult = 1;
 
   mp: number;
+  /** 装備スキル（3つ） */
+  skills: SkillDef[];
   moveX = 0;
   moveY = 0;
   faceX = 0;
@@ -53,6 +57,7 @@ export class Hero implements Mob, DSOwner {
   leap?: { x0: number; y0: number; x1: number; y1: number; T: number };
   charge?: { dx: number; dy: number; left: number; hits: Map<number, number>; t: number };
   evadeDir = { x: 0, y: 0 };
+  evadeDist: number = HERO.evade.distance;
   invulnTimer = 0;
   respawnTimer = 0;
   ssCd = 0;
@@ -91,6 +96,11 @@ export class Hero implements Mob, DSOwner {
     this.hp = this.maxHp;
     this.mp = this.stat('maxMp');
     this.faceY = forwardSign(team);
+    this.skills = loadout.skillIds
+      .map((id) => def.skills.find((s) => s.id === id))
+      .filter((s): s is SkillDef => !!s)
+      .slice(0, 3);
+    if (this.skills.length === 0) this.skills = def.skills.slice(0, 3);
   }
 
   get level() {
@@ -467,15 +477,31 @@ export class Hero implements Mob, DSOwner {
       len = Math.hypot(dx, dy) || 1;
     }
     this.evadeDir = { x: dx / len, y: dy / len };
+    this.evadeDist = HERO.evade.distance;
     this.state = 'evade';
     this.stateT = 0;
     this.invulnTimer = HERO.evade.invuln;
     this.evadeCd = HERO.evade.cooldown;
   }
 
+  /** スキルによる高速移動（回避と同じ挙動で無敵は短い）。 */
+  dash(dx: number, dy: number, distance: number, invuln: number) {
+    const len = Math.hypot(dx, dy);
+    if (len < 0.1) {
+      dx = this.faceX;
+      dy = this.faceY;
+    }
+    const l2 = Math.hypot(dx, dy) || 1;
+    this.evadeDir = { x: dx / l2, y: dy / l2 };
+    this.evadeDist = distance;
+    this.state = 'evade';
+    this.stateT = 0;
+    this.invulnTimer = Math.max(this.invulnTimer, invuln);
+  }
+
   private updateEvade(dt: number) {
     this.stateT += dt;
-    const sp = HERO.evade.distance / HERO.evade.duration;
+    const sp = this.evadeDist / HERO.evade.duration;
     this.x += this.evadeDir.x * sp * dt;
     this.y += this.evadeDir.y * sp * dt;
     this.collide();

@@ -19,6 +19,9 @@ export interface Mob {
   hitFlash: number;
   /** 攻撃などで森の中でも一時的に見える残り秒数 */
   revealTimer: number;
+  /** 鈍足（兵士・巨人用。キャストはバフで管理） */
+  slowT: number;
+  slowMult: number;
 }
 
 export type SquadSource = 'castle' | 'front' | 'deep';
