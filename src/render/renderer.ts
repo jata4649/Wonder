@@ -1,7 +1,7 @@
 // Canvas2D レンダラ。World を読むだけで、World を書き換えない。
 import { renderBackground } from './background';
 import { Camera } from './camera';
-import { drawLevel, drawTopBar } from './hud';
+import { drawLevel, drawSoul, drawTopBar } from './hud';
 import { WORLD_H, WORLD_W } from '../config/map';
 import { teamColor, teamTint } from '../config/settings';
 import type { Base } from '../sim/bases';
@@ -65,6 +65,7 @@ export class Renderer {
     this.drawLobMarkers(world);
     this.drawOrbs(world);
     this.drawMinions(world);
+    this.drawGiants(world);
     this.drawHeroes(world, view.player);
     this.drawBolts(world);
     this.drawStraight(world);
@@ -77,6 +78,7 @@ export class Renderer {
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     if (view.player && view.input?.gesture.active && view.player.drawStance) this.drawRangeShade(view.player);
     drawTopBar(ctx, world, this.camera.viewW);
+    drawSoul(ctx, world, this.viewTeam);
     drawLevel(ctx, world, this.viewTeam, this.camera.viewW);
     if (view.input) this.drawStick(view.input);
     if (view.player?.notice) this.drawNotice(view.player.notice.text);
@@ -101,6 +103,59 @@ export class Renderer {
       ctx.fill();
     }
     ctx.globalAlpha = 1;
+  }
+
+  private drawGiants(world: World) {
+    const { ctx } = this;
+    for (const g of world.giants) {
+      if (!world.isVisibleTo(g, this.viewTeam)) continue;
+      const col = teamColor(g.team);
+      if (g.def.auraRadius) {
+        ctx.fillStyle = teamTint(g.team, 0.1);
+        ctx.strokeStyle = teamTint(g.team, 0.5);
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(g.x, g.y, g.def.auraRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      ctx.beginPath();
+      ctx.ellipse(g.x, g.y + g.r * 0.6, g.r * 1.1, g.r * 0.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      const wob = Math.sin(world.time * 6) * 3;
+      ctx.fillStyle = g.hitFlash > 0 ? '#fff' : col;
+      ctx.beginPath();
+      ctx.arc(g.x, g.y + wob, g.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#ffd23f';
+      ctx.lineWidth = 6;
+      ctx.stroke();
+      if (g.swing > 0) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+        ctx.lineWidth = 10;
+        ctx.beginPath();
+        ctx.arc(g.x, g.y, g.r + 30, world.time * 12, world.time * 12 + 3);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#fff';
+      ctx.font = `900 ${Math.round(g.r)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(g.def.glyph, g.x, g.y + wob + 2);
+      const bw = 130;
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(g.x - bw / 2, g.y - g.r - 26, bw, 12);
+      ctx.fillStyle = '#ffd23f';
+      ctx.fillRect(g.x - bw / 2, g.y - g.r - 26, (bw * g.hp) / g.maxHp, 12);
+      ctx.font = 'bold 18px sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.fillText(g.def.name, g.x, g.y - g.r - 42);
+      if (g.downTimer > 0) {
+        ctx.fillStyle = '#ffd23f';
+        ctx.fillText('DOWN', g.x, g.y + g.r + 20);
+      }
+    }
   }
 
   // ---- キャスト ----

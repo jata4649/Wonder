@@ -57,7 +57,7 @@ export function drawLevel(ctx: CanvasRenderingContext2D, world: World, team: Tea
   const p = world.progress[team];
   const ep = world.progress[(1 - team) as Team];
   const x = 10;
-  const y = 48 + safeTop();
+  const y = 94 + safeTop();
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
   ctx.beginPath();
   ctx.roundRect(x, y, 128, 34, 8);
@@ -74,4 +74,41 @@ export function drawLevel(ctx: CanvasRenderingContext2D, world: World, team: Tea
   ctx.fillRect(x + 8, y + 24, 112, 5);
   ctx.fillStyle = '#7cf0ff';
   ctx.fillRect(x + 8, y + 24, 112 * p.progress(), 5);
+}
+
+const LANE_NAME = ['左', '中央', '右'];
+
+/** ソウルゲージ（左上）。半分で次のソウルを予告（自軍のみ）。 */
+export function drawSoul(ctx: CanvasRenderingContext2D, world: World, team: Team) {
+  const st = world.soul.teams[team];
+  const x = 10;
+  const y = 48 + safeTop();
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.beginPath();
+  ctx.roundRect(x, y, 128, 42, 8);
+  ctx.fill();
+  ctx.fillStyle = '#d9b3ff';
+  ctx.font = 'bold 12px system-ui, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('ソウル', x + 8, y + 11);
+  const frac = st.gauge / 100;
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.fillRect(x + 50, y + 6, 70, 10);
+  const grad = ctx.createLinearGradient(x + 50, 0, x + 120, 0);
+  grad.addColorStop(0, '#9b5cff');
+  grad.addColorStop(1, '#ff7ad9');
+  ctx.fillStyle = grad;
+  ctx.fillRect(x + 50, y + 6, 70 * frac, 10);
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.beginPath();
+  ctx.moveTo(x + 85, y + 4);
+  ctx.lineTo(x + 85, y + 18);
+  ctx.stroke();
+  ctx.font = '11px system-ui, sans-serif';
+  ctx.fillStyle = '#fff';
+  const a = st.announced;
+  const giant = world.giants.find((g) => g.team === team);
+  const txt = giant ? `巨人 出撃中（${LANE_NAME[giant.lane]}）` : a ? `次: ${a.soul.name}（${LANE_NAME[a.lane]}）` : '劣勢ほど溜まる';
+  ctx.fillText(txt, x + 8, y + 30);
 }

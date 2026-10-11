@@ -87,6 +87,20 @@ export class Effects {
             this.add({ kind: 'banner', x: 0, y: 0, r: 0, t: 0, T: 1.6, color: '#ffd23f', text: `チームレベル ${e.level}!`, size: 30 });
           }
           break;
+        case 'soulAnnounce':
+          if (e.team === this.viewTeam) this.banner(`ソウル予告：${e.soul.name}（${['左', '中央', '右'][e.lane]}レーン）`, '#d9b3ff');
+          break;
+        case 'giantSummon': {
+          const own = e.giant.team === this.viewTeam;
+          this.banner(`${own ? '自軍' : '敵軍'}の巨人「${e.giant.def.name}」召喚！`, own ? '#ffd23f' : '#ff8080', 2.4);
+          this.add({ kind: 'ring', x: e.giant.x, y: e.giant.y, r: 300, t: 0, T: 1.2, color: '#d9b3ff' });
+          camera.addShake(12);
+          break;
+        }
+        case 'giantKilled':
+          this.banner(`${e.giant.team === this.viewTeam ? '自軍' : '敵軍'}の巨人が倒れた`, '#ffffff');
+          this.add({ kind: 'ring', x: e.giant.x, y: e.giant.y, r: 220, t: 0, T: 0.8, color: '#fff' });
+          break;
         case 'heal':
           this.add({ kind: 'num', x: e.x, y: e.y - 30, r: 0, t: 0, T: 0.8, color: '#7CFC8A', text: `+${Math.round(e.amount)}`, size: 22 });
           break;

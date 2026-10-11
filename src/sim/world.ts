@@ -1,14 +1,16 @@
 // シミュレーション本体。描画から独立しており、ヘッドレスでも動く。
-import { HERO, MATCH, MINION, XP } from '../config/balance';
+import { HERO, MATCH, MINION, SOUL, XP } from '../config/balance';
 import { CASTER_BY_ID } from '../config/casters';
 import { LANE_WIDTH, buildWalls, forestAt, type Rect, type WallDef } from '../config/map';
 import { ASSIST_BY_ID, SOUL_BY_ID } from '../config/assists';
-import type { Loadout, SkillDef, StatKey, Team } from '../config/types';
+import type { LaneId, Loadout, SkillDef, SoulDef, StatKey, Team } from '../config/types';
 import { createBases, startGateOpening, updateGate, type Base } from './bases';
 import type { DamageSource, HitOpts } from './combat';
 import { dist2, makeRng, type Rng } from './geom';
 import { MatchState } from './gauge';
 import { castSkill, castWonder } from './effects';
+import { giantApplyDown, spawnGiant, updateGiants, type Giant } from './giants';
+import { SoulSystem } from './soul';
 import { SpatialGrid } from './grid';
 import { updateSpawns, updateSquads } from './minions';
 import { makeBolt, updateBolts, type Bolt } from './projectiles/bolt';
@@ -36,7 +38,10 @@ export type GameEvent =
   | { type: 'heal'; x: number; y: number; amount: number; team: Team }
   | { type: 'skill'; hero: Hero; skill: SkillDef }
   | { type: 'wonder'; hero: Hero }
-  | { type: 'levelUp'; team: Team; level: number };
+  | { type: 'levelUp'; team: Team; level: number }
+  | { type: 'soulAnnounce'; team: Team; soul: SoulDef; lane: LaneId }
+  | { type: 'giantSummon'; giant: Giant }
+  | { type: 'giantKilled'; giant: Giant };
 
 export interface CrossResult {
   crossed: boolean;
@@ -62,6 +67,10 @@ export class World {
   lobs: LobShell[] = [];
   straightShots: StraightShot[] = [];
   orbs: XpOrb[] = [];
+  giants: Giant[] = [];
+  soul = new SoulSystem();
+  /** 巨人召喚時の一時停止（秒） */
+  freezeT = 0;
   progress: [TeamProgress, TeamProgress] = [new TeamProgress(), new TeamProgress()];
   grid = new SpatialGrid<Mob>();
   events: GameEvent[] = [];
@@ -117,6 +126,14 @@ export class World {
   *mobs(): Iterable<Mob> {
     yield* this.minions;
     yield* this.heroes;
+    yield* this.giants;
+  }
+
+  summonGiant(team: Team, lane: LaneId, soul: SoulDef): Giant {
+    const g = spawnGiant(this, team, lane, soul);
+    this.freezeT = SOUL.freezeSec;
+    this.emit({ type: 'giantSummon', giant: g });
+    return g;
   }
 
   addHero(loadout: Loadout, team: Team, isPlayer: boolean, lane: number): Hero {
@@ -227,16 +244,19 @@ export class World {
       const v = m.kind === 'minion' ? (m as Minion).xp : m.kind === 'hero' ? XP.heroXp : XP.giantXp;
       dropOrb(this, src.team, m.x, m.y, v);
     }
+    if (m.kind === 'giant') this.emit({ type: 'giantKilled', giant: m as Giant });
     if (m.kind === 'hero') {
       const h = m as Hero;
       h.die();
       this.match.onHeroKilled(h.team);
+      this.soul.onHeroLost(this, h.team);
       const killer = this.heroes.find((x) => x.id === src.heroId);
       if (killer) killer.kills++;
       this.emit({ type: 'heroKilled', hero: h, by: src });
     }
   }
   applyDown(m: Mob) {
+    if (m.kind === 'giant') return giantApplyDown(m as Giant);
     const dur = m.kind === 'minion' ? MINION.downSec : HERO.downSec;
     m.downTimer = Math.max(m.downTimer, dur);
   }
@@ -265,6 +285,7 @@ export class World {
       if (deep) startGateOpening(deep);
     }
     this.match.onBaseDestroyed(b);
+    this.soul.onBaseLost(this, b.team);
     this.emit({ type: 'baseDestroyed', base: b, by: src?.team ?? ((1 - b.team) as Team) });
   }
 
@@ -274,6 +295,11 @@ export class World {
 
   step(dt = MATCH.fixedDt) {
     if (this.ended) return;
+    if (this.freezeT > 0) {
+      // 巨人召喚の瞬間、試合が一瞬停止する
+      this.freezeT -= dt;
+      return;
+    }
     this.time += dt;
     this.match.tick(dt);
     this.grid.rebuild(this.mobs());
@@ -286,6 +312,8 @@ export class World {
     }
     updateSquads(this, dt);
     for (const h of this.heroes) h.update(dt);
+    updateGiants(this, dt);
+    this.soul.update(this, dt);
     updateBolts(this, this.bolts, dt);
     updateDrawProjectiles(this, this.drawShots, dt);
     updateLobs(this, this.lobs, dt);
