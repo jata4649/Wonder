@@ -3,6 +3,7 @@
 // - 自キャストはローカル予測で即応し、スナップショットの ack で巻き戻して未処理の入力を再適用（reconciliation）
 // シミュレーションはサーバーが正。鏡ワールドは step しない。
 import { CROSS } from '../config/balance';
+import { WORLD_H } from '../config/map';
 import { GIANTS } from '../config/giants';
 import { SOUL_BY_ID } from '../config/assists';
 import type { GiantType, Team } from '../config/types';
@@ -64,16 +65,94 @@ export class NetMirror {
   events: GameEvent[] = [];
   serverState: { state: HeroState; x: number; y: number } = { state: 'normal', x: 0, y: 0 };
 
+  /**
+   * 敵陣側（team 1）のプレイヤーは、盤面を上下反転してチームを入れ替えて表示する
+   * （誰にとっても「自陣が下・敵陣が上」。マップは上下対称なのでそのまま成立する）。
+   */
+  readonly flip: boolean;
+  private baseMap = new Map<number, number>();
+
   constructor(seed: number, roster: RosterEntry[], heroId: number, team: Team, spectator: boolean) {
     this.world = new World({ seed });
     this.world.trustVisibility = true; // 見えないものはサーバーが送ってこない
+    this.flip = !spectator && team === 1;
+    const ft = (t: Team) => (this.flip ? ((1 - t) as Team) : t);
     for (const r of roster) {
-      const h = this.world.addHero(r.loadout, r.team, r.human, 1, r.id);
+      const h = this.world.addHero(r.loadout, ft(r.team), r.human, 1, r.id);
       h.netName = r.name;
     }
+    // 拠点 id の対応（反転時は相手チームの同じレーン・同じ段の拠点に置き換える）
+    for (const b of this.world.bases) {
+      const partner = this.flip ? this.world.bases.find((o) => o.team !== b.team && o.lane === b.lane && o.tier === b.tier)! : b;
+      this.baseMap.set(b.id, partner.id);
+    }
     this.heroId = heroId;
-    this.team = team;
+    this.team = ft(team);
     this.spectator = spectator;
+  }
+
+  /** 送信前：ローカル座標（反転済み）→ サーバー座標。 */
+  toServer(cmd: InputCmd): InputCmd {
+    if (!this.flip) return cmd;
+    const H = WORLD_H;
+    return {
+      ...cmd,
+      move: { x: cmd.move.x, y: -cmd.move.y },
+      ...(cmd.aim ? { aim: { x: cmd.aim.x, y: H - cmd.aim.y } } : {}),
+      ...(cmd.dir ? { dir: { x: cmd.dir.x, y: -cmd.dir.y } } : {}),
+      ...(cmd.draw ? { draw: { durMs: cmd.draw.durMs, points: cmd.draw.points.map((v, i) => (i % 2 ? H - v : v)) } } : {}),
+    };
+  }
+
+  /** 受信時：サーバー座標 → ローカル座標（反転・チーム入れ替え）。 */
+  private flipSnapshot(s: SnapshotMsg) {
+    const H = WORLD_H;
+    const T = (v: number | string) => 1 - (v as number);
+    const Y = (v: number | string) => H - (v as number);
+    const N = (v: number | string) => -(v as number);
+    const each = (k: string, fn: (a: Ent) => void) => s.e[k]?.u?.forEach(fn);
+    each('h', (a) => {
+      a[2] = Y(a[2]);
+      a[10] = N(a[10]);
+    });
+    for (const k of ['n', 'g']) each(k, (a) => {
+      a[1] = T(a[1]);
+      a[4] = Y(a[4]);
+    });
+    each('b', (a) => (a[0] = this.baseMap.get(a[0] as number) ?? a[0]));
+    for (const k of ['d', 'o', 'x']) each(k, (a) => {
+      a[1] = T(a[1]);
+      a[3] = Y(a[3]);
+    });
+    each('l', (a) => {
+      a[1] = T(a[1]);
+      a[3] = Y(a[3]);
+      a[5] = Y(a[5]);
+    });
+    each('s', (a) => {
+      a[1] = T(a[1]);
+      a[3] = Y(a[3]);
+      a[5] = N(a[5]);
+    });
+    each('t', (a) => {
+      a[1] = T(a[1]);
+      for (let i = 6; i < a.length; i += 2) a[i] = Y(a[i]);
+    });
+    each('q', (a) => {
+      a[1] = T(a[1]);
+      a[4] = Y(a[4]);
+    });
+    const [tl, g0, g1, res, why] = s.m;
+    s.m = [tl, g1, g0, res === 0 ? 1 : res === 1 ? 0 : res, why];
+    s.p = [s.p[2], s.p[3], s.p[0], s.p[1]];
+    for (const ev of s.ev ?? []) {
+      const e = ev as Record<string, number | string | boolean>;
+      if (typeof e.team === 'number') e.team = 1 - e.team;
+      if (typeof e.by === 'number') e.by = 1 - e.by;
+      if (typeof e.y === 'number') e.y = H - e.y;
+      if (typeof e.dy === 'number') e.dy = -e.dy;
+      if (typeof e.bid === 'number') e.bid = this.baseMap.get(e.bid) ?? e.bid;
+    }
   }
 
   get me(): Hero | undefined {
@@ -89,6 +168,7 @@ export class NetMirror {
 
   /** スナップショットを当てはめる。 */
   apply(s: SnapshotMsg) {
+    if (this.flip) this.flipSnapshot(s);
     const w = this.world;
     const st = s.st;
     this.latestSt = st;
@@ -120,8 +200,8 @@ export class NetMirror {
     if (e.b) for (const a of e.b.u ?? []) this.base(a);
     this.applyKind(e.d, this.shots, (a, p) => this.shot(a, p), (p) => this.push(`d${p.id}`, st, p.x, p.y));
     this.applyKind(e.l, this.lobs, (a, l) => this.lob(a, l));
-    this.applyKind(e.s, this.straights, (a, p) => this.straight(a, p), (p) => this.push(`s${p.id}`, st, p.x, p.y));
-    this.applyKind(e.o, this.bolts, (a, p) => this.bolt(a, p), (p) => this.push(`o${p.id}`, st, p.x, p.y));
+    this.applyKind(e.s, this.straights, (a, p) => this.straight(a, p));
+    this.applyKind(e.o, this.bolts, (a, p) => this.bolt(a, p));
     this.applyKind(e.x, this.orbs, (a, p) => this.orb(a, p), (p) => this.push(`x${p.id}`, st, p.x, p.y));
     this.applyKind(e.t, this.trails, (a, p) => this.trail(a, p));
     this.applyKind(e.q, this.pings, (a, p) => this.ping(a, p));
@@ -275,8 +355,25 @@ export class NetMirror {
         if (p.history.length > 10) p.history.shift();
       }
     }
-    for (const p of w.straightShots) lerp(`s${p.id}`, p);
-    for (const p of w.bolts) lerp(`o${p.id}`, p);
+    // 直線弾：発射位置と速度から等速で進める
+    for (const p of w.straightShots) {
+      p.age = (p.age ?? 0) + dt;
+      p.x = p.x0 + p.vx * p.age;
+      p.y = p.y0 + p.vy * p.age;
+    }
+    // ホーミング弾：相手の（補間後の）位置へ向かって進める
+    for (const b of w.bolts) {
+      const t = b.target as { x: number; y: number } | undefined;
+      if (!t) continue;
+      const dx = t.x - b.x;
+      const dy = t.y - b.y;
+      const d = Math.hypot(dx, dy);
+      const step = 420 * dt;
+      if (d > step) {
+        b.x += (dx / d) * step;
+        b.y += (dy / d) * step;
+      }
+    }
     for (const o of w.orbs) lerp(`x${o.id}`, o);
     for (const l of w.lobs) l.t = Math.min(l.T, l.t + dt);
     for (const t of w.trails) t.t = Math.max(0, t.t - dt);
@@ -315,7 +412,7 @@ export class NetMirror {
 
   // ---- エンティティ変換 ----
   private minion(a: Ent, m?: Minion): Minion {
-    const [id, team, big, x, y, hp, maxHp, flags, atk] = a as number[];
+    const [id, team, big, x, y, hp, maxHp, flags] = a as number[];
     let sq = this.squadStub.get(id);
     if (!sq) {
       sq = { id: -id, team: team as Team, lane: 1, source: 'castle', members: [], ax: x, ay: y, formTimer: 0, state: 'advance', speed: 0 };
@@ -356,7 +453,7 @@ export class NetMirror {
     o.ramming = !!(flags & 2);
     o.downTimer = flags & 4 ? 0.1 : 0;
     o.hitFlash = flags & 8 ? 0.1 : 0;
-    o.atkTimer = atk / 100;
+    o.atkTimer = flags & 16 ? 1.2 : 0; // 攻撃直後（2コマ目）
     return o;
   }
 
@@ -426,23 +523,27 @@ export class NetMirror {
   }
 
   private lob(a: Ent, l?: LobShell): LobShell {
-    const [id, team, x0, y0, tx, ty, T, radius, color, t] = a as (number & string)[];
-    const o = l ?? ({ id, team, alive: true } as unknown as LobShell);
-    Object.assign(o, { x0, y0, tx, ty, T: (T as number) / 100, radius, color, t: Math.max(o.t ?? 0, (t as number) / 100) });
+    const [id, team, x0, y0, tx, ty, T, radius, color] = a as (number & string)[];
+    const o = l ?? ({ id, team, alive: true, t: 0 } as unknown as LobShell);
+    Object.assign(o, { x0, y0, tx, ty, T: (T as number) / 100, radius, color });
     return o;
   }
 
   private straight(a: Ent, s?: StraightShot): StraightShot {
-    const [id, team, x, y, vx, vy] = a as number[];
-    const o = s ?? ({ id, team: team as Team, x, y, alive: true } as unknown as StraightShot);
+    const [id, team, x0, y0, vx, vy] = a as number[];
+    const o = s ?? ({ id, team: team as Team, x: x0, y: y0, x0, y0, age: 0, alive: true } as unknown as StraightShot);
     o.vx = vx;
     o.vy = vy;
     return o;
   }
 
   private bolt(a: Ent, b?: Bolt): Bolt {
-    const [id, team, x, y] = a as number[];
-    return b ?? ({ id, team: team as Team, x, y, alive: true } as unknown as Bolt);
+    const [id, team, x0, y0, targetId] = a as number[];
+    if (b) return b;
+    // 狙う相手（兵士・キャスト・巨人）を追いかけて飛ぶ。相手が見えなければ発射位置に留まる
+    const w = this.world;
+    const target = w.minions.find((m) => m.id === targetId) ?? w.heroes.find((h) => h.id === targetId) ?? w.giants.find((g) => g.id === targetId);
+    return { id, team: team as Team, x: x0, y: y0, x0, y0, target, alive: true } as unknown as Bolt;
   }
 
   private orb(a: Ent, o?: XpOrb): XpOrb {

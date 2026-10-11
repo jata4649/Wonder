@@ -77,6 +77,7 @@ export type ClientMsg =
   | { k: 'input'; cmd: InputCmd }
   | { k: 'ping'; t: number }
   | { k: 'start' } // ルームのホストが開始
+  | { k: 'signal'; kind: 'gather' | 'retreat' | 'caution' | 'enemy' } // ピング（位置はサーバーが自キャストから決める）
   | { k: 'leave' };
 
 /** 参加者の静的情報（試合開始時に1回）。 */

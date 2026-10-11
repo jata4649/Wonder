@@ -7,14 +7,29 @@ import { assetUrl } from '../../render/assets';
 import type { Difficulty, Loadout } from '../../../shared/config/types';
 
 const KEY = 'otogi-arena-loadout';
+const esc = (v: string) => v.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const ROLE_LABEL = { fighter: 'ファイター', attacker: 'アタッカー', support: 'サポーター' } as const;
 const TYPE_LABEL = { curve: '軌道弾', leap: '突進（跳躍）', charge: '突進（突撃）', lob: '投擲弾' } as const;
 const SLOT_LABEL = { weapon: '武器', armor: '防具', tool: '道具', accessory: '装飾', soul: 'ソウル' } as const;
 
+export type PlayMode = 'solo' | 'coop' | 'quick' | 'room' | 'spectate';
+
 export interface TitleResult {
   loadout: Loadout;
   difficulty: Difficulty;
+  mode?: PlayMode;
+  name?: string;
+  roomCode?: string;
+  roomPassword?: string;
 }
+
+const MODE_LABEL: Record<PlayMode, [string, string]> = {
+  solo: ['ソロ', 'CPU戦（オフライン）'],
+  coop: ['協力', '人間1〜4人＋CPU'],
+  quick: ['オンライン', '4対4・30秒でCPU補充'],
+  room: ['ルーム', 'コードで身内対戦'],
+  spectate: ['観戦', '1分遅れで配信'],
+};
 
 export function defaultLoadout(casterId: string): Loadout {
   const c = CASTER_BY_ID[casterId] ?? CASTERS[0];
@@ -36,7 +51,7 @@ function loadSaved(): TitleResult {
   } catch {
     /* ignore */
   }
-  return { loadout: defaultLoadout('akazukin'), difficulty: 'normal' };
+  return { loadout: defaultLoadout('akazukin'), difficulty: 'normal', mode: 'solo', name: '' };
 }
 
 export function showTitle(root: HTMLElement, onStart: (r: TitleResult) => void) {
@@ -97,6 +112,20 @@ export function showTitle(root: HTMLElement, onStart: (r: TitleResult) => void) 
             (s) => `<button class="pick ${s.id === lo.soulId ? 'on' : ''}" data-soul="${s.id}"><span>${s.name}</span><small>${s.desc ?? ''}</small></button>`,
           ).join('')}
         </div>
+        <h2>対戦モード</h2>
+        <div class="grid modes">
+          ${(Object.keys(MODE_LABEL) as PlayMode[])
+            .map((m) => `<button class="pick ${m === (state.mode ?? 'solo') ? 'on' : ''}" data-mode="${m}"><span>${MODE_LABEL[m][0]}</span><small>${MODE_LABEL[m][1]}</small></button>`)
+            .join('')}
+        </div>
+        ${
+          (state.mode ?? 'solo') !== 'solo'
+            ? `<div class="mode-opts">
+          <label>名前 <input data-field="name" maxlength="12" value="${esc(state.name ?? '')}" placeholder="プレイヤー"/></label>
+          ${state.mode === 'room' ? `<label>ルームコード <input data-field="roomCode" maxlength="8" value="${esc(state.roomCode ?? '')}" placeholder="例: OTOGI1"/></label><label>パスワード（任意） <input data-field="roomPassword" maxlength="16" value="${esc(state.roomPassword ?? '')}"/></label>` : ''}
+        </div>`
+            : ''
+        }
         <h2>難易度（AI）</h2>
         <div class="grid diff">
           ${(['easy', 'normal', 'hard'] as Difficulty[])
@@ -105,7 +134,7 @@ export function showTitle(root: HTMLElement, onStart: (r: TitleResult) => void) 
         </div>
         <label class="opt"><input type="checkbox" data-opt="swap" ${settings.swapColors ? 'checked' : ''}/> 陣営カラーを反転（自軍 <span style="color:${teamColor(0)}">■</span>）</label>
         <label class="opt"><input type="checkbox" data-opt="fps" ${settings.showFps ? 'checked' : ''}/> FPSを表示</label>
-        <div class="buttons sticky"><button class="btn primary" data-act="start">出撃（4 vs 4）</button></div>
+        <div class="buttons sticky"><button class="btn primary" data-act="start">${{ solo: '出撃（4 vs 4・CPU戦）', coop: '協力で出撃', quick: 'オンライン対戦を探す', room: 'ルームに入る', spectate: '観戦する' }[state.mode ?? 'solo']}</button></div>
         <details class="howto"><summary>操作方法</summary>
           <ul>
             <li>画面<b>左半分</b>：触れた場所にスティックが出て移動</li>
@@ -118,7 +147,12 @@ export function showTitle(root: HTMLElement, onStart: (r: TitleResult) => void) 
       </div>`;
   };
 
+  el.addEventListener('input', (e) => {
+    const t = e.target as HTMLInputElement;
+    if (t.dataset.field) (state as unknown as Record<string, string>)[t.dataset.field] = t.value;
+  });
   el.addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).tagName === 'INPUT' && (e.target as HTMLInputElement).type === 'text') return;
     const t = (e.target as HTMLElement).closest('button, input') as HTMLElement | null;
     if (!t) return;
     const lo = state.loadout;
@@ -137,6 +171,8 @@ export function showTitle(root: HTMLElement, onStart: (r: TitleResult) => void) 
       else if (lo.assistIds.length < 4) lo.assistIds.push(id);
     } else if (t.dataset.soul) {
       lo.soulId = t.dataset.soul;
+    } else if (t.dataset.mode) {
+      state.mode = t.dataset.mode as PlayMode;
     } else if (t.dataset.diff) {
       state.difficulty = t.dataset.diff as Difficulty;
     } else if (t.dataset.opt === 'swap') {
@@ -153,7 +189,11 @@ export function showTitle(root: HTMLElement, onStart: (r: TitleResult) => void) 
         /* ignore */
       }
       el.remove();
-      onStart({ loadout: { ...lo, skillIds: [...lo.skillIds], assistIds: [...lo.assistIds] }, difficulty: state.difficulty });
+      if (state.mode === 'room' && !(state.roomCode ?? '').trim()) {
+        alert('ルームコードを入力してください');
+        return;
+      }
+      onStart({ ...state, loadout: { ...lo, skillIds: [...lo.skillIds], assistIds: [...lo.assistIds] } });
       return;
     } else return;
     const scroll = el.scrollTop;

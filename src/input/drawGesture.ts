@@ -137,7 +137,7 @@ export class DrawGesture {
 
   private fire(kind: 'fire' | 'auto') {
     const h = this.getHero();
-    if (h && this.pts.length >= 2 && pathLength(this.pts) > 8) h.cmds.push({ t: 'ds', pts: this.pts.slice() });
+    if (h && this.pts.length >= 2 && pathLength(this.pts) > 8) h.cmds.push({ t: 'ds', pts: this.pts.slice(), durMs: Math.max(1, performance.now() - this.startT) });
     this.lastResult = { kind, t: performance.now() };
     this.reset();
   }

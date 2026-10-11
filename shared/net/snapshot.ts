@@ -22,7 +22,7 @@ const r2 = (v: number) => Math.round(v * 100);
 
 export function heroEnt(h: Hero, own: boolean, me: boolean): Ent {
   const flags = (h.alive ? 1 : 0) | (h.drawStance ? 2 : 0) | (h.invulnTimer > 0 ? 4 : 0) | (h.hitFlash > 0 ? 8 : 0) | (h.downTimer > 0 ? 16 : 0) | (h.isPlayer ? 32 : 0);
-  const buffs = h.buffs.map((b) => `${b.kind}:${r2(b.value)}:${r1(b.t)}`).join(',');
+  const buffs = h.buffs.map((b) => `${b.kind}:${r2(b.value)}`).join(','); // 残り時間は送らない（変化のたびに差分が出るため）
   return [
     h.id,
     r(h.x),
@@ -50,17 +50,26 @@ export function heroEnt(h: Hero, own: boolean, me: boolean): Ent {
 }
 
 /** 視点ごとのエンティティ一覧（種類 → 配列）。 */
-export function serializeWorld(world: World, v: Viewer): Record<string, Ent[]> {
+export function serializeWorld(world: World, v: Viewer, prev?: Map<number, Ent>, tickPhase = 0): Record<string, Ent[]> {
   const see = (m: { team: Team } & Parameters<World['isVisibleTo']>[0]) => v.spectator || m.team === v.team || world.isVisibleTo(m, v.team);
   const out: Record<string, Ent[]> = { h: [], n: [], g: [], b: [], d: [], l: [], s: [], o: [], x: [], t: [], q: [] };
   for (const h of world.heroes) {
     if (h.alive && !see(h)) continue;
     out.h.push(heroEnt(h, v.spectator || h.team === v.team, h.id === v.heroId));
   }
+  const focus = world.heroes.find((h) => h.id === v.heroId);
+  const lowRate = (x: number, y: number, id: number) =>
+    // 関心領域：自キャストから遠い兵士は 1/3 の頻度で更新（帯域削減）
+    !v.spectator && focus && (focus.x - x) ** 2 + (focus.y - y) ** 2 > 1300 * 1300 && (tickPhase + id) % 3 !== 0;
   for (const m of world.minions) {
     if (!see(m)) continue;
-    const flags = (m.squad.formTimer > 0 && !m.ramming ? 1 : 0) | (m.ramming ? 2 : 0) | (m.downTimer > 0 ? 4 : 0) | (m.hitFlash > 0 ? 8 : 0);
-    out.n.push([m.id, m.team, m.big ? 1 : 0, r(m.x), r(m.y), r(m.hp), m.maxHp, flags, r2(m.atkTimer)]);
+    if (lowRate(m.x, m.y, m.id) && prev?.has(m.id)) {
+      out.n.push(prev.get(m.id)!); // 前回の値をそのまま（差分なし）
+      continue;
+    }
+    const alt = m.ramming || m.atkTimer > 1.25 * 0.7 ? 1 : 0;
+    const flags = (m.squad.formTimer > 0 && !m.ramming ? 1 : 0) | (m.ramming ? 2 : 0) | (m.downTimer > 0 ? 4 : 0) | (m.hitFlash > 0 ? 8 : 0) | (alt ? 16 : 0);
+    out.n.push([m.id, m.team, m.big ? 1 : 0, r(m.x), r(m.y), r(m.hp), m.maxHp, flags]);
   }
   for (const g of world.giants) {
     if (!see(g)) continue;
@@ -71,9 +80,10 @@ export function serializeWorld(world: World, v: Viewer): Record<string, Ent[]> {
     out.b.push([b.id, r(b.hp), b.alive ? 1 : 0, g ? GATE_CODE[g.state] : 0, g ? r1(g.timer) : 0, g?.openedAt !== undefined ? r2(g.openedAt) : -1, b.hitFlash > 0 ? 1 : 0]);
   }
   for (const p of world.drawShots) out.d.push([p.id, p.team, r(p.x), r(p.y), r(p.width), p.color, p.crossed ? 1 : 0]);
-  for (const s of world.lobs) out.l.push([s.id, s.team, r(s.x0), r(s.y0), r(s.tx), r(s.ty), r2(s.T), r(s.radius), s.color, r2(s.t)]);
-  for (const s of world.straightShots) out.s.push([s.id, s.team, r(s.x), r(s.y), r(s.vx), r(s.vy)]);
-  for (const b of world.bolts) out.o.push([b.id, b.team, r(b.x), r(b.y)]);
+  // 投擲・直線弾・ホーミング弾は「出た時点の情報」だけ送り、クライアント側で動かす（毎回の位置は送らない）
+  for (const s of world.lobs) out.l.push([s.id, s.team, r(s.x0), r(s.y0), r(s.tx), r(s.ty), r2(s.T), r(s.radius), s.color]);
+  for (const s of world.straightShots) out.s.push([s.id, s.team, r(s.x0), r(s.y0), r(s.vx), r(s.vy)]);
+  for (const b of world.bolts) out.o.push([b.id, b.team, r(b.x0), r(b.y0), b.target.id]);
   for (const o of world.orbs) {
     if (!v.spectator && o.team !== v.team) continue; // 相手チームの経験値は見せない（回収できないので）
     out.x.push([o.id, o.team, r(o.x), r(o.y), o.value]);
@@ -96,7 +106,11 @@ export class DeltaEncoder {
     this.last.clear();
   }
 
+  /** 前回送った兵士（関心領域の外は前回値を使い回すため） */
+  lastMinions = new Map<number, Ent>();
+
   diff(cur: Record<string, Ent[]>): Record<string, EntDelta> {
+    this.lastMinions = new Map((cur.n ?? []).map((e) => [e[0] as number, e]));
     const out: Record<string, EntDelta> = {};
     for (const kind of Object.keys(cur)) {
       const prev = this.last.get(kind) ?? new Map<number, string>();
@@ -197,7 +211,7 @@ export function buildSnapshot(world: World, v: Viewer, enc: DeltaEncoder, tick: 
     s: soul(st0),
     ...(v.spectator ? { s2: soul(st1) } : {}),
     fz: world.freezeT > 0 ? 1 : 0,
-    e: enc.diff(serializeWorld(world, v)),
+    e: enc.diff(serializeWorld(world, v, enc.lastMinions, tick)),
     ...(ev.length ? { ev } : {}),
   };
 }

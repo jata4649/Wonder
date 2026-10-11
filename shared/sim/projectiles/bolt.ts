@@ -8,6 +8,9 @@ import type { World } from '../world';
 export interface Bolt {
   id: number;
   team: Team;
+  /** 発射位置（通信用） */
+  x0: number;
+  y0: number;
   x: number;
   y: number;
   target: Mob;
@@ -21,6 +24,8 @@ export interface Bolt {
 export function makeBolt(id: number, from: Mob, target: Mob, damage: number, kind: DamageSource['kind'] = 'minion'): Bolt {
   return {
     id,
+    x0: from.x,
+    y0: from.y,
     team: from.team,
     x: from.x,
     y: from.y,

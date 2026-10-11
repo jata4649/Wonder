@@ -8,29 +8,41 @@
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173 （スマホは同一LANのIPで）
-npm test           # vitest（シミュレーションの自己テスト＋AI 4v4 フルマッチ）
-npm run build
+npm run dev        # クライアント http://localhost:5173 （/ws は対戦サーバーへプロキシ）
+npm run server     # 対戦サーバー ws://localhost:8787/ws （オンライン対戦に必要。CPU戦だけなら不要）
+npm test           # vitest（シミュレーション・AI・オンライン［権威/検証/ラグ補償/切断/マッチング/観戦/予測］）
+npm start          # 本番：ビルドしてサーバーが静的配信＋WebSocket（docker build . でも可）
 ```
 
-デバッグ用 URL パラメータ：`?c=<casterId>` タイトルを飛ばして開始 / `&d=easy|normal|hard` / `&fps=1` FPS表示 / `&stress=1` 負荷テスト。
+デバッグ用 URL パラメータ：`?c=<casterId>` タイトルを飛ばして開始 / `&mode=solo|coop|quick|room|spectate` / `&room=CODE` / `&name=` / `&party=ID` / `&server=wss://...` / `&d=easy|normal|hard` / `&fps=1` / `&stress=1`。
+サーバーの環境変数：`PORT`、`LAG_MS=200`（往復遅延の注入）、`NO_LAG_COMP=1`（ラグ補償を切って比較）、`DEBUG_ENDPOINTS=1`（`/debug/rooms`）、`MMR_FILE`。
 
-## 構成（sim と render を分離）
+## 構成（SPEC 8.10）
 
 ```
-src/
-  config/   map.ts balance.ts casters.ts giants.ts assists.ts types.ts settings.ts
-  sim/      world.ts bases.ts minions.ts combat.ts gauge.ts xp.ts soul.ts giants.ts effects.ts trails.ts grid.ts
-            units/hero.ts  projectiles/drawshot.ts bolt.ts
-  ai/       heroAI.ts laneAssign.ts nav.ts setup.ts
-  render/   renderer.ts background.ts camera.ts hud.ts minimap.ts effects.ts
-  input/    touch.ts virtualStick.ts drawGesture.ts
-  ui/       cards.ts controls.ts result.ts screens/title.ts
-  game.ts main.ts
+shared/   sim/    兵士・DS・門・ソウル・勝敗（クライアントとサーバーで同一コード）
+          ai/     ヒーローAI（CPU戦・CPU補充・切断時の引き継ぎで共用）
+          net/    プロトコル・スナップショット（差分）・鏡ワールド（補間・予測・reconciliation）
+          config/ balance / casters / assets など
+server/   index.ts  rooms/GameRoom.ts  matchmaking/(Matchmaker, mmr)  validation/validate.ts
+src/      クライアント（描画・入力・カメラ・UI）。CPU戦は shared/sim をローカルで回す
+tools/    lagbot.ts（遅延下の命中検証ボット）、loadtest.ts（1ルームの負荷）
 ```
 
-`sim/` は DOM に依存せず、ヘッドレスで 7 分の試合を回せる（`tests/match.test.ts`）。
-プレイヤーも AI も同じ `Command`（ss/ds/evade/skill/ws）を発行し、sim 側で検証する。
+## オンライン（SPEC 8）
+
+- **サーバー権威＋クライアント予測**。サーバーは 30Hz 固定 tick（1 tick＝シミュレーション 1/60s×2）、スナップショットは 15Hz・差分のみ。
+- クライアントは**入力（InputCmd）だけ**を送る（`hello`／`input`／`ping`／`signal`／`start`／`leave`）。位置・HP・MP・CD は送らない。
+- 自キャストは**ローカル予測**、他者は**100ms 補間**、ズレは ack（lastProcessedSeq）で巻き戻して未処理入力を再適用。
+- **ラグ補償**：キャストの過去位置を保持し、描線の当たり判定を（RTT/2＋補間100ms）ぶん、**最大150ms** 巻き戻す。静止物は補償しない。
+- **検証**：MP・CD・同時押し・1tick1発動・描画速度・座標・seq（再送）。描線長の超過は**切り詰めて発動**。移動ベクトルは正規化。
+- **切断**：即座に同じ `shared/ai` の AI が引き継ぎ、**30秒以内の再接続で元のキャストに戻る**（過ぎたら最後まで AI）。
+- **マッチメイキング**：MMR（Elo＋拠点破壊・与ダメージ）が近い順、待ち時間で許容幅が広がる。**30秒で CPU 補充して開始**、補充枠には後から人間が入れる。パーティは同一チーム。
+- **モード**：ソロ（CPU戦・オフライン）／協力（人間1〜4＋CPU）／オンライン4対4／ルーム（コード＋任意パスワード、ホストが開始）／観戦（1分遅延）。
+- **時計**：タイマー・門・ウェーブ・巨人はすべてサーバー管理。クライアントは ping/pong の最小 RTT から時計のずれを推定。
+- **敵陣側（team 1）のプレイヤー**には盤面を上下反転して見せる（誰にとっても自陣が下）。マップは上下対称なので成立する。
+- サーバーが落ちていても **CPU 戦はそのまま遊べる**（オンラインで繋がらないときは「CPU戦で遊ぶ」に切り替え）。
+- 帯域：投擲・直線弾・兵士のホーミング弾は発射時の情報だけ送ってクライアントで動かす、遠くの兵士は 1/3 の頻度、森の中の見えない敵は送らない、`permessage-deflate` で圧縮。
 
 ## 画像（SPEC 7・`ASSETS.md`）
 
@@ -78,10 +90,20 @@ src/
 - キャストID は画像のファイル名に合わせて `garasunokutsu` / `onryou` に変更。
 - 巨人の原画は背景付きのため、フィールドでは丸く切り抜いて使う（四角い背景を見せない）。
 - 追加キャスト枠（`castersExtra`）の画像は配置のみで、ゲームにはまだ登場しない。
-- ディレクトリ構成は既存のまま（`sim/gates.ts`・`ai/difficulty.ts`・`config/bases.ts` は既存ファイルに含まれる）。
+- ディレクトリ構成：SPEC 8.10 の `client/` は既存の `src/` をそのまま使う。`sim/gates.ts`・`ai/difficulty.ts`・`config/bases.ts` は既存ファイルに含まれる。
+- 同期は Colyseus ではなく `ws` 直＋自前の JSON 差分（量子化）＋ permessage-deflate。
+- InputCmd には SPEC の項目に加え、狙い（`aim`）・カード番号（`card`）・回避方向（`dir`）を持たせた（SS・カード・回避の発動に必要なため）。
+- ラグ補償量は「RTT/2＋補間100ms」を 150ms で頭打ちにする。RTT が 300ms を超える相手は補償しない（SPEC の「150ms を超える遅延は補償しない」は、補間遅延込みでは常に超えてしまうため、上限で切る解釈にした）。
+- 描画速度の上限は 12px/ms（例：660px を 55ms 未満で描くと拒否）。
+- ピングの位置はサーバー側の自キャストの位置（座標は送らない）。1秒に1回まで。
+- 協力モードの CPU は、敵＝選んだ難易度、味方＝「ふつう」以上。オンライン4対4の CPU 補充は「ふつう」。
+- 退場ペナルティは未実装（SPEC で任意）。MMR はサーバーのファイルに保存（`server/data/mmr.json`）。
 
 ## 未検証（実機でしか確認できない点）
 
 - ミッドレンジ Android での 60fps（ヘッドレスでは兵士多数＋巨人6体で JS 約2.5ms/フレーム）。
 - 実機での横画面ロック・全画面化、ノッチ（safe-area）付き端末での配置、親指の届きやすさ。
 - 実際のマルチタッチ（ヘッドレスでは合成 PointerEvent で確認）。
+- 実回線（モバイル回線・Wi-Fi の揺らぎ）での体感遅延・予測の収束。確認は同一マシン上と、サーバーで遅延を注入した状態（LAG_MS=200）まで。
+- 多数ルーム同時稼働時のサーバー負荷・水平スケール（Docker イメージは用意、ロードバランサ構成は未検証）。
+- 帯域：1クライアントあたり約 110kbps（兵士多数時・deflate 後）。モバイル回線での十分性は未検証。

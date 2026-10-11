@@ -293,3 +293,18 @@ describe('M12 予測と reconciliation', () => {
     expect(Math.hypot(me.x - hero.x, me.y - hero.y)).toBeLessThan(8);
   });
 });
+
+describe('M12 ピング', () => {
+  it('位置はサーバー側の自キャストから決まり、連打は1秒に1回', () => {
+    const c = clock();
+    const conn = new FakeConn('p');
+    const room = new GameRoom({ id: 'S', mode: 'quick', difficulty: 'normal', seed: 3, now: c.now, players: [{ token: 't', name: 'A', loadout: lo('akazukin'), team: 0, conn, mmr: 1500 }] });
+    const h = room.seatOf('t')!.hero;
+    room.onSignal('t', 'gather');
+    room.onSignal('t', 'gather');
+    expect(room.world.pings).toHaveLength(1);
+    expect(room.world.pings[0].x).toBe(h.x);
+    room.onSignal('t', 'hack');
+    expect(room.world.pings).toHaveLength(1);
+  });
+});

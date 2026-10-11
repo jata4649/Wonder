@@ -24,6 +24,11 @@ const MIME: Record<string, string> = {
 
 const http = createServer((req, res) => {
   const url = decodeURIComponent((req.url ?? '/').split('?')[0]);
+  if (url === '/debug/rooms' && process.env.DEBUG_ENDPOINTS) {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify([...mm.rooms.values()].map((r) => ({ id: r.id, tick: r.tick, seats: r.seats.map((s) => ({ name: s.name, human: !!s.token, ai: r.director.isAI(s.hero), dmgHeroes: Math.round(s.hero.dmgHeroes), rtt: Math.round(s.rttMs), rejects: s.rejects })) }))));
+    return;
+  }
   if (url === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ ok: true, rooms: mm.rooms.size, queue: mm.queue.length }));
@@ -44,7 +49,13 @@ const http = createServer((req, res) => {
 });
 
 const mm = new Matchmaker(new MmrStore(process.env.MMR_FILE ?? 'server/data/mmr.json'));
-const wss = new WebSocketServer({ server: http, path: '/ws', maxPayload: 64 * 1024 });
+// permessage-deflate：JSON のスナップショットを圧縮（ブラウザは自動で対応）
+const wss = new WebSocketServer({
+  server: http,
+  path: '/ws',
+  maxPayload: 64 * 1024,
+  perMessageDeflate: { threshold: 256, zlibDeflateOptions: { level: 3 }, serverNoContextTakeover: false },
+});
 let connSeq = 1;
 
 wss.on('connection', (ws: WebSocket) => {
@@ -89,6 +100,9 @@ wss.on('connection', (ws: WebSocket) => {
         break;
       case 'ping':
         conn.send({ k: 'pong', t: msg.t, st: Date.now() });
+        break;
+      case 'signal':
+        if (token) mm.roomOf(token)?.onSignal(token, msg.kind);
         break;
       case 'start':
         if (token) mm.startPrivateBy(token);

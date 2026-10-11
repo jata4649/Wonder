@@ -40,6 +40,7 @@ interface Seat {
   aiForever: boolean;
   mmr: number;
   rejects: Record<RejectReason | 'clamped', number>;
+  lastSignalAt?: number;
 }
 
 interface Spectator {
@@ -70,6 +71,8 @@ export interface RoomOptions {
 }
 
 export class GameRoom {
+  /** ラグ補償の有効/無効（比較検証用。既定は有効） */
+  static lagCompensation = process.env?.NO_LAG_COMP ? false : true;
   readonly id: string;
   readonly mode: RoomOptions['mode'];
   world: World;
@@ -174,6 +177,16 @@ export class GameRoom {
     }
   }
 
+  /** ピング：位置はサーバー側の自キャストの位置（クライアントから座標は受け取らない）。 */
+  onSignal(token: string, kind: string) {
+    const s = this.seatOf(token);
+    if (!s || !s.conn || !['gather', 'retreat', 'caution', 'enemy'].includes(kind)) return;
+    const now = this.now();
+    if (now - (s.lastSignalAt ?? 0) < 1000) return; // 連打防止
+    s.lastSignalAt = now;
+    this.world.addPing(s.team, kind as never, s.hero.x, s.hero.y);
+  }
+
   onPing(token: string, rttMs: number) {
     const s = this.seatOf(token);
     if (s) s.rttMs = s.rttMs * 0.7 + rttMs * 0.3;
@@ -240,7 +253,8 @@ export class GameRoom {
         continue;
       }
       const lagMs = s.rttMs / 2 + NET.interpMs;
-      const r = validateInput(cmd, h, { lastSeq: s.lastSeq, actedThisTick: false, lagMs: lagMs <= 300 ? lagMs : 0 });
+      const comp = GameRoom.lagCompensation && lagMs <= NET.severeRttMs ? lagMs : 0;
+      const r = validateInput(cmd, h, { lastSeq: s.lastSeq, actedThisTick: false, lagMs: comp });
       if (r.reject !== 'stale') s.lastSeq = Math.max(s.lastSeq, cmd.seq);
       if (r.reject) s.rejects[r.reject]++;
       if (r.clamped) s.rejects.clamped++;

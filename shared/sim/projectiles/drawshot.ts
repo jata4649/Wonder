@@ -379,6 +379,10 @@ export function updateLobs(world: World, list: LobShell[], dt: number) {
 export interface StraightShot {
   id: number;
   team: Team;
+  /** 発射位置（通信用） */
+  x0: number;
+  y0: number;
+  age?: number;
   ownerId: number;
   x: number;
   y: number;
@@ -416,6 +420,8 @@ export function makeStraightShots(
     ownerId: owner.id,
     x: owner.x + Math.cos(a) * 20,
     y: owner.y + Math.sin(a) * 20,
+    x0: owner.x + Math.cos(a) * 20,
+    y0: owner.y + Math.sin(a) * 20,
     vx: Math.cos(a) * def.speed,
     vy: Math.sin(a) * def.speed,
     range,

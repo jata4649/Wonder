@@ -17,7 +17,7 @@ import type { Mob } from './types';
 
 export type Command =
   | { t: 'ss'; x: number; y: number }
-  | { t: 'ds'; pts: Vec[]; lagMs?: number }
+  | { t: 'ds'; pts: Vec[]; lagMs?: number; durMs?: number }
   | { t: 'evade'; dx: number; dy: number }
   | { t: 'skill'; slot: number; x: number; y: number }
   | { t: 'ws'; x: number; y: number };
