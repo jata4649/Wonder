@@ -1,14 +1,14 @@
 // Canvas2D レンダラ。World を読むだけで、World を書き換えない。
 import { renderBackground } from './background';
 import { Camera } from './camera';
-import { drawLevel, drawPlayerStatus, drawSoul, drawTopBar } from './hud';
+import { drawLevel, drawPlayerStatus, drawSoul, drawTopBar, safeTop } from './hud';
 import { Minimap } from './minimap';
 import { WORLD_H, WORLD_W } from '../config/map';
 import { teamColor, teamTint } from '../config/settings';
 import type { Base } from '../sim/bases';
 import type { World } from '../sim/world';
 import type { Team } from '../config/types';
-import { HERO } from '../config/balance';
+import { CROSS, HERO } from '../config/balance';
 import { forestAt } from '../config/map';
 import type { InputManager } from '../input/touch';
 import type { Hero } from '../sim/units/hero';
@@ -18,6 +18,8 @@ export interface RenderView {
   player?: Hero;
   input?: InputManager;
   fx?: Effects;
+  dt?: number;
+  fps?: number;
 }
 
 export class Renderer {
@@ -63,6 +65,7 @@ export class Renderer {
     ctx.drawImage(this.bg, 0, 0, this.bg.width, this.bg.height, 0, 0, WORLD_W, WORLD_H);
 
     this.drawDoors(world);
+    this.drawTrails(world);
     for (const b of world.bases) this.drawBase(b);
     this.drawLobMarkers(world);
     this.drawOrbs(world);
@@ -85,7 +88,16 @@ export class Renderer {
     drawLevel(ctx, world, this.viewTeam, this.camera.viewW);
     if (view.player) drawPlayerStatus(ctx, view.player, this.camera.viewH);
     if (view.input) this.drawStick(view.input);
-    this.minimap.draw(ctx, world, this.viewTeam, this.camera, view.player?.id ?? -1);
+    this.minimap.drawCached(ctx, world, this.viewTeam, this.camera, view.player?.id ?? -1, this.dpr, view.dt ?? 1 / 60);
+    if (view.fps !== undefined) {
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(10, 134 + safeTop(), 70, 20);
+      ctx.fillStyle = view.fps >= 55 ? '#7CFC8A' : view.fps >= 40 ? '#ffd23f' : '#ff6b6b';
+      ctx.font = 'bold 12px monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${view.fps.toFixed(0)} fps`, 16, 144 + safeTop());
+    }
     if (view.player?.notice) this.drawNotice(view.player.notice.text);
     view.fx?.drawScreen(ctx, this.camera.viewW, this.camera.viewH);
   }
@@ -108,6 +120,43 @@ export class Renderer {
       ctx.fill();
     }
     ctx.globalAlpha = 1;
+  }
+
+  /** クロスドロー用の軌跡（インク）。約20秒かけて薄れる。 */
+  private drawTrails(world: World) {
+    const { ctx } = this;
+    const bb = this.camera.bounds();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (const t of world.trails) {
+      if (t.bbox.x1 < bb.x0 || t.bbox.x0 > bb.x1 || t.bbox.y1 < bb.y0 || t.bbox.y0 > bb.y1) continue;
+      const life = t.t / CROSS.trailLifeSec;
+      const mine = t.team === this.viewTeam;
+      ctx.globalAlpha = 0.12 + 0.4 * life;
+      ctx.strokeStyle = t.crossed ? '#ffd23f' : teamColor(t.team);
+      ctx.lineWidth = 16;
+      ctx.beginPath();
+      ctx.moveTo(t.pts[0].x, t.pts[0].y);
+      for (let i = 1; i < t.pts.length; i++) ctx.lineTo(t.pts[i].x, t.pts[i].y);
+      ctx.stroke();
+      // 墨のにじみ（端点の玉）
+      ctx.fillStyle = ctx.strokeStyle;
+      const e = t.pts[t.pts.length - 1];
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, 12, 0, Math.PI * 2);
+      ctx.fill();
+      if (mine) {
+        ctx.globalAlpha = 0.25 + 0.5 * life;
+        ctx.strokeStyle = t.color;
+        ctx.lineWidth = 4;
+        ctx.setLineDash([10, 12]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'miter';
   }
 
   private drawPings(world: World) {

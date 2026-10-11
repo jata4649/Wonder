@@ -1,5 +1,6 @@
 // 1試合ぶんのセッション：World・入力・描画・UI をまとめる。
 import { MATCH } from './config/balance';
+import { settings } from './config/settings';
 import type { Difficulty, Loadout } from './config/types';
 import { setupMatch } from './ai/setup';
 import { InputManager } from './input/touch';
@@ -15,6 +16,7 @@ export interface GameOptions {
   loadout: Loadout;
   difficulty: Difficulty;
   seed?: number;
+  showFps?: boolean;
 }
 
 export class Game {
@@ -29,11 +31,14 @@ export class Game {
   private raf = 0;
   private resultShown = false;
   private running = true;
+  private fps = 60;
+  private fpsAcc = 0;
+  private fpsFrames = 0;
 
   constructor(
     private renderer: Renderer,
     private uiRoot: HTMLElement,
-    opts: GameOptions,
+    private opts: GameOptions,
     private onExit: (again: boolean) => void,
   ) {
     this.world = new World({ seed: opts.seed ?? (Date.now() & 0xffff) });
@@ -57,8 +62,12 @@ export class Game {
     this.raf = requestAnimationFrame(this.frame);
   }
 
+  /** 直近フレームの処理時間（ms, 計測用） */
+  frameMs = 0;
+
   private frame = (now: number) => {
     if (!this.running) return;
+    const t0 = performance.now();
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
     const w = this.world;
@@ -78,7 +87,20 @@ export class Game {
     if (w.wallsDirty) w.wallsDirty = false;
     if (this.player.alive) cam.follow(this.player.x, this.player.y, dt, now / 1000);
     cam.update(dt);
-    this.renderer.render(w, { player: this.player, input: this.input, fx: this.fx });
+    this.fpsAcc += dt;
+    this.fpsFrames++;
+    if (this.fpsAcc >= 0.5) {
+      this.fps = this.fpsFrames / this.fpsAcc;
+      this.fpsAcc = 0;
+      this.fpsFrames = 0;
+    }
+    this.renderer.render(w, {
+      player: this.player,
+      input: this.input,
+      fx: this.fx,
+      dt,
+      fps: settings.showFps || this.opts.showFps ? this.fps : undefined,
+    });
     this.controls.update();
     this.cards.update();
     if (w.ended && !this.resultShown) {
@@ -86,6 +108,7 @@ export class Game {
       this.input.enabled = false;
       showResult(this.uiRoot, w, () => this.exit(true), () => this.exit(false));
     }
+    this.frameMs = this.frameMs * 0.9 + (performance.now() - t0) * 0.1;
     this.raf = requestAnimationFrame(this.frame);
   };
 

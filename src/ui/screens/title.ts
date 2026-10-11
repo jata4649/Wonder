@@ -94,6 +94,7 @@ export function showTitle(root: HTMLElement, onStart: (r: TitleResult) => void) 
             .join('')}
         </div>
         <label class="opt"><input type="checkbox" data-opt="swap" ${settings.swapColors ? 'checked' : ''}/> 陣営カラーを反転（自軍 <span style="color:${teamColor(0)}">■</span>）</label>
+        <label class="opt"><input type="checkbox" data-opt="fps" ${settings.showFps ? 'checked' : ''}/> FPSを表示</label>
         <div class="buttons sticky"><button class="btn primary" data-act="start">出撃（4 vs 4）</button></div>
         <details class="howto"><summary>操作方法</summary>
           <ul>
@@ -130,6 +131,9 @@ export function showTitle(root: HTMLElement, onStart: (r: TitleResult) => void) 
       state.difficulty = t.dataset.diff as Difficulty;
     } else if (t.dataset.opt === 'swap') {
       settings.swapColors = (t as HTMLInputElement).checked;
+      saveSettings();
+    } else if (t.dataset.opt === 'fps') {
+      settings.showFps = (t as HTMLInputElement).checked;
       saveSettings();
     } else if (t.dataset.act === 'start') {
       if (lo.skillIds.length === 0) lo.skillIds = CASTER_BY_ID[lo.casterId].skills.slice(0, 3).map((s) => s.id);

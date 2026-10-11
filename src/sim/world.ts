@@ -1,5 +1,5 @@
 // シミュレーション本体。描画から独立しており、ヘッドレスでも動く。
-import { HERO, MATCH, MINION, SOUL, XP } from '../config/balance';
+import { CROSS, HERO, MATCH, MINION, SOUL, XP } from '../config/balance';
 import { CASTER_BY_ID } from '../config/casters';
 import { LANE_WIDTH, buildWalls, forestAt, type Rect, type WallDef } from '../config/map';
 import { ASSIST_BY_ID, SOUL_BY_ID } from '../config/assists';
@@ -11,6 +11,7 @@ import { MatchState } from './gauge';
 import { castSkill, castWonder } from './effects';
 import { giantApplyDown, spawnGiant, updateGiants, type Giant } from './giants';
 import { SoulSystem } from './soul';
+import { findCross, makeTrail, type Trail } from './trails';
 import { SpatialGrid } from './grid';
 import { updateSpawns, updateSquads } from './minions';
 import { makeBolt, updateBolts, type Bolt } from './projectiles/bolt';
@@ -29,7 +30,7 @@ import { TeamProgress, dropOrb, updateOrbs, type XpOrb } from './xp';
 export type GameEvent =
   | { type: 'gateOpen'; base: Base }
   | { type: 'baseDestroyed'; base: Base; by: Team }
-  | { type: 'damage'; x: number; y: number; amount: number; team: Team; fx?: HitOpts['fx']; big?: boolean }
+  | { type: 'damage'; x: number; y: number; amount: number; team: Team; fx?: HitOpts['fx']; big?: boolean; targetId?: number }
   | { type: 'ram'; x: number; y: number; team: Team }
   | { type: 'blast'; x: number; y: number; r: number; team: Team }
   | { type: 'sweep'; x: number; y: number; dx: number; dy: number; team: Team }
@@ -42,7 +43,8 @@ export type GameEvent =
   | { type: 'soulAnnounce'; team: Team; soul: SoulDef; lane: LaneId }
   | { type: 'giantSummon'; giant: Giant }
   | { type: 'giantKilled'; giant: Giant }
-  | { type: 'ping'; team: Team; kind: PingKind; x: number; y: number };
+  | { type: 'ping'; team: Team; kind: PingKind; x: number; y: number }
+  | { type: 'cross'; hero: Hero; x: number; y: number; solo: boolean };
 
 export type PingKind = 'gather' | 'retreat' | 'caution' | 'enemy';
 export interface Ping {
@@ -80,6 +82,7 @@ export class World {
   giants: Giant[] = [];
   soul = new SoulSystem();
   pings: Ping[] = [];
+  trails: Trail[] = [];
   /** AI など、毎ティック sim の前に動くもの */
   controllers: { update(dt: number): void }[] = [];
   /** 巨人召喚時の一時停止（秒） */
@@ -205,11 +208,20 @@ export class World {
     } else h.buffs.push({ ...b });
   }
 
-  // ---- クロスドロー（M10 で実装） ----
-  checkCross(_h: Hero, _pts: { x: number; y: number }[]): CrossResult {
-    return { crossed: false, sizeMult: 1, powerAdd: 0, speedMult: 1 };
+  // ---- クロスドロー ----
+  checkCross(h: Hero, pts: { x: number; y: number }[]): CrossResult {
+    const tr = findCross(this.trails, h.team, h.id, h.def.draw.soloCross, h.lastTrailId, pts);
+    if (!tr) return { crossed: false, sizeMult: 1, powerAdd: 0, speedMult: 1 };
+    this.emit({ type: 'cross', hero: h, x: pts[0].x, y: pts[0].y, solo: tr.ownerId === h.id });
+    return { crossed: true, sizeMult: CROSS.sizeMult, powerAdd: CROSS.powerAdd, speedMult: CROSS.speedMult };
   }
-  addTrail(_h: Hero, _pts: { x: number; y: number }[], _crossed: boolean) {}
+  addTrail(h: Hero, pts: { x: number; y: number }[], crossed: boolean) {
+    if (pts.length < 2) return;
+    const tr = makeTrail(this.nextId(), h.team, h.id, pts, crossed, h.def.accent);
+    this.trails.push(tr);
+    h.lastTrailId = tr.id;
+    if (this.trails.length > 60) this.trails.shift();
+  }
 
   // ---- 門 ----
   /** team から見て通れない（敵の閉じた門）矩形。 */
@@ -255,7 +267,7 @@ export class World {
     return amount;
   }
   onMobDamaged(m: Mob, dealt: number, src: DamageSource, opts: HitOpts) {
-    if (dealt > 0) this.emit({ type: 'damage', x: m.x, y: m.y - m.r, amount: dealt, team: src.team, fx: opts.fx });
+    if (dealt > 0) this.emit({ type: 'damage', x: m.x, y: m.y - m.r, amount: dealt, team: src.team, fx: opts.fx, targetId: m.id });
   }
   onMobKilled(m: Mob, src: DamageSource, opts: HitOpts) {
     // 経験値ドロップ（体当たりで消えた兵士は出さない）
@@ -340,6 +352,8 @@ export class World {
     updateStraightShots(this, this.straightShots, dt);
     updateOrbs(this, dt);
     for (const p of this.pings) p.t -= dt;
+    for (const t of this.trails) t.t -= dt;
+    if (this.trails.length && this.trails[0].t <= 0) this.trails = this.trails.filter((t) => t.t > 0);
     if (this.pings.length) this.pings = this.pings.filter((p) => p.t > 0);
     this.bolts = this.bolts.filter((b) => b.alive);
     this.drawShots = this.drawShots.filter((p) => p.alive);

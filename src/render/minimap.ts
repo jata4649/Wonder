@@ -13,6 +13,42 @@ const PING_ICON: Record<string, string> = { gather: '集', retreat: '退', cauti
 export class Minimap {
   expanded = false;
   rect = { x: 0, y: 0, w: 0, h: 0 };
+  private cache?: HTMLCanvasElement;
+  private cacheKey = '';
+  private age = 99;
+
+  /** 10Hz で再描画し、毎フレームはキャッシュを貼るだけ（60fps 対策）。 */
+  drawCached(ctx: CanvasRenderingContext2D, world: World, team: Team, camera: Camera, playerId: number, dpr: number, dt: number) {
+    this.layout(camera.viewW, camera.viewH);
+    const key = `${this.expanded}:${camera.viewW}x${camera.viewH}:${dpr}`;
+    this.age += dt;
+    if (!this.cache || key !== this.cacheKey || this.age >= 0.1) {
+      this.age = 0;
+      this.cacheKey = key;
+      if (!this.cache) this.cache = document.createElement('canvas');
+      const c = this.cache;
+      c.width = Math.ceil(camera.viewW * dpr);
+      c.height = Math.ceil(camera.viewH * dpr);
+      const g = c.getContext('2d')!;
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      g.clearRect(0, 0, camera.viewW, camera.viewH);
+      this.draw(g, world, team, camera, playerId);
+    }
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (this.expanded) {
+      ctx.drawImage(this.cache, 0, 0);
+    } else {
+      const r = this.rect;
+      const pad = 2;
+      const sx = Math.max(0, (r.x - pad) * dpr);
+      const sy = Math.max(0, (r.y - pad) * dpr);
+      const sw = (r.w + pad * 2) * dpr;
+      const sh = (r.h + pad * 2) * dpr;
+      ctx.drawImage(this.cache, sx, sy, sw, sh, sx, sy, sw, sh);
+    }
+    ctx.restore();
+  }
 
   layout(viewW: number, viewH: number) {
     const mapW = PLAY_X1 - PLAY_X0;

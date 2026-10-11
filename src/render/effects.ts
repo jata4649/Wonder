@@ -38,6 +38,7 @@ export class Effects {
           break;
         case 'damage': {
           const mine = e.team === this.viewTeam;
+          if (e.targetId === playerId && e.amount >= 35) camera.addShake(Math.min(10, e.amount / 10));
           this.add({
             kind: 'num',
             x: e.x + (Math.random() * 20 - 10),
@@ -86,6 +87,10 @@ export class Effects {
           if (e.team === this.viewTeam) {
             this.add({ kind: 'banner', x: 0, y: 0, r: 0, t: 0, T: 1.6, color: '#ffd23f', text: `チームレベル ${e.level}!`, size: 30 });
           }
+          break;
+        case 'cross':
+          this.add({ kind: 'text', x: e.x, y: e.y - 40, r: 0, t: 0, T: 1, color: '#ffd23f', text: e.solo ? '単独CROSS!' : 'CROSS!', size: 28 });
+          this.add({ kind: 'ring', x: e.x, y: e.y, r: 90, t: 0, T: 0.5, color: '#ffd23f' });
           break;
         case 'soulAnnounce':
           if (e.team === this.viewTeam) this.banner(`ソウル予告：${e.soul.name}（${['左', '中央', '右'][e.lane]}レーン）`, '#d9b3ff');
