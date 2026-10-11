@@ -2,6 +2,8 @@
 import { ASSISTS, SOULS } from '../../config/assists';
 import { CASTERS, CASTER_BY_ID } from '../../config/casters';
 import { saveSettings, settings, teamColor } from '../../config/settings';
+import { ASSETS } from '../../config/assets';
+import { assetUrl } from '../../render/assets';
 import type { Difficulty, Loadout } from '../../config/types';
 
 const KEY = 'otogi-arena-loadout';
@@ -43,24 +45,32 @@ export function showTitle(root: HTMLElement, onStart: (r: TitleResult) => void) 
   el.className = 'screen title interactive';
   root.appendChild(el);
 
+  const logo = assetUrl(ASSETS.ui.titleLogo);
+  // 小枠＝丸アイコン、説明欄＝バストアップ（無ければ立ち絵）
+  const iconOf = (id: string) => assetUrl(ASSETS.casters[id]?.icon);
+  const artOf = (id: string) => assetUrl(ASSETS.casters[id]?.bust || ASSETS.casters[id]?.portrait);
   const render = () => {
     const lo = state.loadout;
     const c = CASTER_BY_ID[lo.casterId];
     const d = c.draw;
     el.innerHTML = `
       <div class="panel wide">
-        <div class="logo">おとぎアリーナ<small>3レーン・ドローショット対戦（横画面推奨）</small></div>
+        ${logo ? `<div class="logo-img"><img src="${logo}" alt="おとぎアリーナ"/></div>` : '<div class="logo">おとぎアリーナ</div>'}
+        <div class="logo-sub">3レーン・ドローショット対戦（横画面推奨）</div>
         <h2>キャスト</h2>
         <div class="grid casters">
           ${CASTERS.map(
             (x) => `<button class="pick ${x.id === lo.casterId ? 'on' : ''}" data-caster="${x.id}">
-              <span class="glyph" style="background:${x.color};color:${x.accent}">${x.glyph}</span>
+              ${iconOf(x.id) ? `<img class="cicon" src="${iconOf(x.id)}" alt=""/>` : `<span class="glyph" style="background:${x.color};color:${x.accent}">${x.glyph}</span>`}
               <span>${x.name}</span><small>${ROLE_LABEL[x.role]}</small></button>`,
           ).join('')}
         </div>
-        <div class="desc">
+        <div class="desc with-art">
+          ${artOf(c.id) ? `<img class="portrait" src="${artOf(c.id)}" alt=""/>` : ''}
+          <div>
           <b>${c.name}</b>（${ROLE_LABEL[c.role]} / ${TYPE_LABEL[d.type]}）<br/><b class="note">${c.dsNote}</b><br/>${c.desc}
           <div class="params">射程 ${d.range}${d.type === 'curve' ? ` / 描線長 ${d.drawLength} / 弾速 ${d.baseSpeed}（直線×${d.speedUpStraight}・鋭角×${d.speedDownSharp}）` : ''}${d.multiShot > 1 ? ` / ${d.multiShot}発` : ''}${d.down ? '' : ' / 非ダウン'}</div>
+          </div>
         </div>
         <h2>スキル <small>${lo.skillIds.length}/3 装備</small></h2>
         <div class="grid skills">

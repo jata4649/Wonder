@@ -82,7 +82,7 @@ describe('ドローショット', () => {
     expect(decayFactor(ROLE_DECAY.fighter, 99)).toBeCloseTo(0.6, 1);
     expect(decayFactor(ROLE_DECAY.attacker, 99)).toBeLessThanOrEqual(0.5);
     expect(decayFactor(ROLE_DECAY.support, 99)).toBeLessThanOrEqual(0.5);
-    for (const id of ['garasu', 'hoshitsubame', 'onryo']) {
+    for (const id of ['garasunokutsu', 'hoshitsubame', 'onryou']) {
       const d = CASTER_BY_ID[id].draw;
       expect(d.pierceDecay).toBe(false);
     }
@@ -125,7 +125,7 @@ describe('ドローショット', () => {
 
   it('投擲は大兵士に遮られない（着弾範囲全体にダメージ）', () => {
     const w = new World();
-    const h = w.addHero(lo('garasu'), 0, true, 1);
+    const h = w.addHero(lo('garasunokutsu'), 0, true, 1);
     h.x = 1200;
     h.y = 2000;
     const sq = spawnSquad(w, 1, 1, 'castle', 4, 1, 1200, 1700);
@@ -239,7 +239,7 @@ describe('突進・跳躍', () => {
   });
   it('突撃は大兵士でも途切れず、減衰なし', () => {
     const w = new World();
-    const h = w.addHero(lo('onryo'), 0, true, 1);
+    const h = w.addHero(lo('onryou'), 0, true, 1);
     h.x = 1200;
     h.y = 2000;
     const sq = spawnSquad(w, 1, 1, 'castle', 3, 1, 1200, 1850);

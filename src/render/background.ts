@@ -17,17 +17,40 @@ import { teamTint } from '../config/settings';
 import { makeRng } from '../sim/geom';
 
 export const BG_SCALE = 0.5;
+/** 背景タイルがあるときは細部が見えるよう解像度を上げる。 */
+export const BG_SCALE_TILE = 0.75;
 
-export function renderBackground(walls: WallDef[]): HTMLCanvasElement {
+/**
+ * map_tile_v.png（683×1024・シームレス）には道が3本、約228px間隔で縦に走っている。
+ * レーン間隔600に合わせて k=600/227.7 倍で敷き、道の中心をレーン x に揃える（SPEC 7.1：縦レーンは _v を縦に敷く）。
+ */
+const TILE_ROAD_PERIOD = 683 / 3;
+const TILE_ROAD0 = 113; // タイル内の最初の道の中心 x
+const TILE_K = (LANE_X[1] - LANE_X[0]) / TILE_ROAD_PERIOD;
+const TILE_OX = LANE_X[0] - TILE_ROAD0 * TILE_K;
+
+export function renderBackground(walls: WallDef[], tile?: CanvasImageSource & { width: number; height: number }): HTMLCanvasElement {
+  const scale = tile ? BG_SCALE_TILE : BG_SCALE;
   const c = document.createElement('canvas');
-  c.width = Math.ceil(WORLD_W * BG_SCALE);
-  c.height = Math.ceil(WORLD_H * BG_SCALE);
+  c.width = Math.ceil(WORLD_W * scale);
+  c.height = Math.ceil(WORLD_H * scale);
   const g = c.getContext('2d')!;
-  g.scale(BG_SCALE, BG_SCALE);
+  g.scale(scale, scale);
 
   // 地面
   g.fillStyle = '#3b5a3a';
   g.fillRect(0, 0, WORLD_W, WORLD_H);
+  if (tile) {
+    const pat = g.createPattern(tile, 'repeat');
+    if (pat) {
+      g.save();
+      g.translate(TILE_OX, 0);
+      g.scale(TILE_K, TILE_K);
+      g.fillStyle = pat;
+      g.fillRect(-TILE_OX / TILE_K, 0, WORLD_W / TILE_K + tile.width, WORLD_H / TILE_K + tile.height);
+      g.restore();
+    }
+  }
   // 陣地の色味（下=自軍, 上=敵軍）
   const grad = g.createLinearGradient(0, 0, 0, WORLD_H);
   grad.addColorStop(0, teamTint(1, 0.18));
@@ -40,6 +63,12 @@ export function renderBackground(walls: WallDef[]): HTMLCanvasElement {
   const rng = makeRng(7);
   // 森
   for (const s of FOREST_STRIPS) {
+    if (tile) {
+      // タイルの森を活かし、少し暗くして「見通しの悪い森」と分かるように
+      g.fillStyle = 'rgba(8,28,14,0.38)';
+      g.fillRect(s.x0, FOREST_Y0, s.x1 - s.x0, FOREST_Y1 - FOREST_Y0);
+      continue;
+    }
     g.fillStyle = '#1f3a24';
     g.fillRect(s.x0, FOREST_Y0, s.x1 - s.x0, FOREST_Y1 - FOREST_Y0);
     for (let i = 0; i < 220; i++) {
@@ -55,6 +84,12 @@ export function renderBackground(walls: WallDef[]): HTMLCanvasElement {
   // レーン（縦の道）
   for (const lx of LANE_X) {
     const x0 = lx - LANE_WIDTH / 2;
+    if (tile) {
+      // タイルの道（幅≈190）をレーン幅260まで薄く広げる
+      g.fillStyle = 'rgba(196,176,132,0.42)';
+      g.fillRect(x0, PLAY_Y0, LANE_WIDTH, PLAY_Y1 - PLAY_Y0);
+      continue;
+    }
     g.fillStyle = '#9b8a62';
     g.fillRect(x0, PLAY_Y0, LANE_WIDTH, PLAY_Y1 - PLAY_Y0);
     g.fillStyle = 'rgba(255,255,255,0.06)';

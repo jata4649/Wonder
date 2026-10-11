@@ -363,6 +363,7 @@ export class World {
     for (const b of this.bases) {
       if (b.hitFlash > 0) b.hitFlash -= dt;
       if (updateGate(b, dt)) {
+        b.gate!.openedAt = this.time;
         b.spawnTimer = 0;
         b.spawnCount = 0;
         this.emit({ type: 'gateOpen', base: b });

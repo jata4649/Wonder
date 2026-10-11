@@ -1,6 +1,10 @@
 // リザルト画面。
 import type { World } from '../sim/world';
 import { teamColor } from '../config/settings';
+import { ASSETS } from '../config/assets';
+import { assetUrl } from '../render/assets';
+
+const iconOf = (id: string) => assetUrl(ASSETS.casters[id]?.icon);
 
 export function showResult(root: HTMLElement, world: World, onRetry: () => void, onTitle?: () => void) {
   const r = world.match.result!;
@@ -34,7 +38,7 @@ export function showResult(root: HTMLElement, world: World, onRetry: () => void,
             const a = world.heroes.filter((h) => h.team === 0)[i];
             const b = world.heroes.filter((h) => h.team === 1)[i];
             const cell = (h: typeof a) =>
-              h ? `<td>${h.isPlayer ? '★' : ''}${h.def.name}</td><td>${h.kills}</td><td>${h.deaths}</td>` : '<td></td><td></td><td></td>';
+              h ? `<td>${h.isPlayer ? '★' : ''}${iconOf(h.def.id) ? `<img class="ricon" src="${iconOf(h.def.id)}" alt=""/>` : ''}${h.def.name}</td><td>${h.kills}</td><td>${h.deaths}</td>` : '<td></td><td></td><td></td>';
             return `<tr>${cell(a)}<td></td>${cell(b)}</tr>`;
           })
           .join('')}

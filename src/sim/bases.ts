@@ -19,7 +19,7 @@ export interface Base {
   maxHp: number;
   alive: boolean;
   /** 奥拠点の手前にある刻の門。手前拠点が壊れるまで closed。 */
-  gate?: { kind: GateKind; state: GateState; timer: number; x: number; y: number };
+  gate?: { kind: GateKind; state: GateState; timer: number; x: number; y: number; openedAt?: number };
   /** 視界半径（ミニマップ表示用）。 */
   vision: number;
   /** 被弾演出用。 */

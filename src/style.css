@@ -100,7 +100,7 @@ html.land .evade-btn { width: 50px; height: 50px; font-size: 20px; border-width:
 html.land .pings { top: calc(clamp(34px, 9vh, 48px) + 4px + env(safe-area-inset-top)); }
 html.land .ping { width: 34px; height: 26px; font-size: 11px; }
 /* 縦画面ではピングを上部バーの下に */
-html:not(.land) .pings { top: calc(clamp(34px, 9vh, 48px) + 4px + env(safe-area-inset-top)); left: auto; right: 116px; transform: none; }
+html:not(.land) .pings { top: calc(clamp(34px, 9vh, 48px) + 4px + env(safe-area-inset-top)); left: 122px; right: auto; transform: none; }
 
 /* ---- 横画面のタイトル／リザルト：上寄せ＋スクロール（開始ボタンが見切れないように） ---- */
 .screen { align-items: flex-start; }
@@ -116,3 +116,20 @@ html.land .result .panel { width: min(720px, 100%); }
 .screen > .panel { margin-top: auto; margin-bottom: auto; }
 .panel.wide { overflow: visible; max-height: none; }
 .screen.title { padding-bottom: 0; }
+/* ---- アセット（SPEC 7） ---- */
+.logo-img { text-align: center; margin: 0 0 4px; }
+.logo-img img { height: clamp(70px, 18vh, 130px); border-radius: 12px; }
+.logo-sub { text-align: center; font-size: 12px; opacity: 0.75; margin-bottom: 6px; }
+.cicon { width: 40px; height: 40px; border-radius: 50%; }
+html.land .cicon { width: 34px; height: 34px; }
+.desc.with-art { display: flex; gap: 12px; align-items: flex-start; }
+.desc .portrait { width: 84px; border-radius: 10px; flex: none; }
+.ping { display: flex; align-items: center; justify-content: center; gap: 1px; }
+.ping img { width: 18px; height: 18px; }
+.ping span { font-size: 10px; }
+html.land .ping { width: 46px; }
+.card { background-size: 100% 100%; background-position: center; color: #4a2b14; }
+.card small { color: #6b3f1c; }
+.card b { text-shadow: 0 1px 0 #fff8; }
+.card.ws { background-color: rgba(120,60,140,0.85); }
+.ricon { width: 18px; height: 18px; border-radius: 50%; vertical-align: middle; margin-right: 3px; }

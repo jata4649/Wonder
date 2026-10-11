@@ -2,6 +2,10 @@
 import type { InputManager } from '../input/touch';
 import type { Hero } from '../sim/units/hero';
 import type { PingKind } from '../sim/world';
+import { ASSETS } from '../config/assets';
+import { assetUrl } from '../render/assets';
+
+const PING_ICON = { gather: 'iconFlag', retreat: 'iconArrow', caution: 'iconAlert', enemy: 'iconExtra' } as const;
 
 export class Controls {
   root: HTMLDivElement;
@@ -39,7 +43,8 @@ export class Controls {
     ] as [PingKind, string][]) {
       const b = document.createElement('button');
       b.className = 'ping interactive';
-      b.textContent = label;
+      const icon = assetUrl(ASSETS.ui[PING_ICON[kind]]);
+      b.innerHTML = icon ? `<img src="${icon}" alt=""/><span>${label}</span>` : label;
       b.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         e.stopPropagation();

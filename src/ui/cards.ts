@@ -4,6 +4,8 @@ import type { SkillDef } from '../config/types';
 import { skillReady, wonderReady } from '../sim/effects';
 import type { Hero } from '../sim/units/hero';
 import type { World } from '../sim/world';
+import { ASSETS } from '../config/assets';
+import { assetUrl } from '../render/assets';
 
 export class Cards {
   root: HTMLDivElement;
@@ -15,6 +17,9 @@ export class Cards {
     const make = (skill: SkillDef, slot: number) => {
       const el = document.createElement('button');
       el.className = `card interactive ${slot < 0 ? 'ws' : ''}`;
+      // スキルカード枠（ui/panel_frame.png を流用）
+      const frame = assetUrl(ASSETS.ui.panelFrame);
+      if (frame) el.style.backgroundImage = `url("${frame}")`;
       el.innerHTML = `<b>${skill.glyph}</b><small>${slot < 0 ? 'WS' : skill.mpCost}</small>`;
       const cd = document.createElement('div');
       cd.className = 'cd';

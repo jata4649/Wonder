@@ -3,19 +3,25 @@ import { renderBackground } from './background';
 import { Camera } from './camera';
 import { drawLaneStatus, drawLevel, drawPlayerStatus, drawSoul, drawTopBar, hudLayout } from './hud';
 import { Minimap } from './minimap';
-import { WORLD_H, WORLD_W } from '../config/map';
+import { LANE_WIDTH, WORLD_H, WORLD_W } from '../config/map';
 import { teamColor, teamTint } from '../config/settings';
 import type { Base } from '../sim/bases';
 import type { World } from '../sim/world';
 import type { Team } from '../config/types';
-import { CROSS, HERO } from '../config/balance';
+import { CROSS, HERO, MINION } from '../config/balance';
 import { forestAt } from '../config/map';
 import type { InputManager } from '../input/touch';
 import type { Hero } from '../sim/units/hero';
 import type { Effects } from './effects';
 import { UprightQueue } from './uprightText';
-import { getImage } from './assets';
+import { baseImg, bgTile, casterSprite, gateImg, giantArt, giantSprite, minionImg, uiImg, type Img } from './assets';
 import { orient, updateOrientation } from '../input/orientation';
+
+const PING_UI = { gather: 'iconFlag', retreat: 'iconArrow', caution: 'iconAlert', enemy: 'iconExtra' } as const;
+/** 兵士画像の高さ（大兵士=1.0、小兵士はその0.6倍）。 */
+const MINION_ART_H = 78;
+/** 拠点・城の画像の高さ（世界px）。 */
+const BASE_ART_H: Record<string, number> = { small: 190, normal: 215, large: 245, huge: 290, castle: 300 };
 
 export interface RenderView {
   player?: Hero;
@@ -35,6 +41,7 @@ export class Renderer {
   /** 視点のチーム（自軍） */
   viewTeam: Team = 0;
   private bg?: HTMLCanvasElement;
+  private bgHasTile = false;
 
   constructor(public canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d', { alpha: false })!;
@@ -60,8 +67,10 @@ export class Renderer {
 
   render(world: World, view: RenderView = {}) {
     const { ctx, camera } = this;
-    if (!this.bg) {
-      this.bg = renderBackground(world.walls);
+    const tile = bgTile();
+    if (!this.bg || (tile && !this.bgHasTile)) {
+      this.bg = renderBackground(world.walls, tile);
+      this.bgHasTile = !!tile;
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = '#14181f';
@@ -73,7 +82,7 @@ export class Renderer {
 
     this.drawDoors(world);
     this.drawTrails(world);
-    for (const b of world.bases) this.drawBase(b);
+    for (const b of world.bases) this.drawBase(b, world.time);
     this.drawLobMarkers(world);
     this.drawOrbs(world);
     this.drawMinions(world);
@@ -112,6 +121,16 @@ export class Renderer {
     view.fx?.drawScreen(ctx, this.camera.viewW, this.camera.viewH);
   }
 
+  /** 画像を足元（下端中央）基準でワールド空間に描く。高さ h（世界px）、幅は縦横比から。 */
+  private drawFoot(im: Img, x: number, footY: number, h: number, alpha = 1) {
+    const w = (h * im.width) / im.height;
+    const { ctx } = this;
+    const a = ctx.globalAlpha;
+    ctx.globalAlpha = a * alpha;
+    ctx.drawImage(im, x - w / 2, footY - h, w, h);
+    ctx.globalAlpha = a;
+  }
+
   /** 画面下方向にずらした影（向きに関係なく画面上で横長の楕円）。 */
   private shadow(x: number, y: number, rx: number, ry: number, off: number, alpha = 0.35) {
     const { ctx, camera } = this;
@@ -126,10 +145,17 @@ export class Renderer {
     const { ctx } = this;
     const bb = this.camera.bounds();
     const pulse = 1 + Math.sin(world.time * 8) * 0.15;
+    const star = uiImg('soulStar');
     for (const o of world.orbs) {
       if (o.x < bb.x0 || o.x > bb.x1 || o.y < bb.y0 || o.y > bb.y1) continue;
       const s = (7 + Math.min(8, o.value * 2)) * pulse;
       ctx.globalAlpha = o.t < 3 ? 0.4 + 0.6 * Math.abs(Math.sin(o.t * 10)) : 1;
+      if (star) {
+        const sz = s * 3;
+        if (o.team !== this.viewTeam) ctx.globalAlpha *= 0.5;
+        ctx.drawImage(star, o.x - sz / 2, o.y - sz / 2, sz, sz * (star.height / star.width));
+        continue;
+      }
       ctx.fillStyle = o.team === this.viewTeam ? '#7cf0ff' : '#c9a3ff';
       ctx.beginPath();
       ctx.moveTo(o.x, o.y - s);
@@ -190,7 +216,9 @@ export class Renderer {
       ctx.beginPath();
       ctx.arc(p.x, p.y, 40 + 40 * (1 - k), 0, Math.PI * 2);
       ctx.stroke();
-      this.up.text(p.x, p.y, icon[p.kind], { size: 24, weight: '900', color: '#ffd23f', dy: 93, bg: 'rgba(0,0,0,0.6)' });
+      const pim = uiImg(PING_UI[p.kind]);
+      if (pim) ctx.drawImage(pim, p.x - 40, p.y - 150, 80, 80);
+      this.up.text(p.x, p.y, icon[p.kind], { size: 22, weight: '900', color: '#ffd23f', dy: pim ? 50 : 93, bg: 'rgba(0,0,0,0.6)' });
     }
   }
 
@@ -213,14 +241,35 @@ export class Renderer {
       const u = this.camera.up;
       const gx = g.x + u.x * wob;
       const gy = g.y + u.y * wob;
-      const img = getImage('giants', g.def.type);
+      const sprite = giantSprite(g.def.type);
+      const art = sprite ? undefined : giantArt(g.def.type);
       ctx.fillStyle = g.hitFlash > 0 ? '#fff' : col;
       ctx.beginPath();
       ctx.arc(gx, gy, g.r, 0, Math.PI * 2);
       ctx.fill();
+      if (art) {
+        // 原画は背景付きなので、丸く切り抜いたメダリオンとして駒にする（四角い背景を見せない）
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(gx, gy, g.r - 4, 0, Math.PI * 2);
+        ctx.clip();
+        const w = g.r * 2.6;
+        const h = (w * art.height) / art.width;
+        ctx.globalAlpha = g.hitFlash > 0 ? 0.6 : 1;
+        ctx.drawImage(art, gx - w / 2, gy - h * 0.47, w, h);
+        ctx.restore();
+      }
       ctx.strokeStyle = '#ffd23f';
       ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.arc(gx, gy, g.r, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(gx, gy, g.r + 5, 0, Math.PI * 2);
+      ctx.stroke();
+      if (sprite) this.drawFoot(sprite, gx, gy + g.r, g.r * 3.2, g.hitFlash > 0 ? 0.6 : 1);
       if (g.swing > 0) {
         ctx.strokeStyle = 'rgba(255,255,255,0.8)';
         ctx.lineWidth = 10;
@@ -228,8 +277,7 @@ export class Renderer {
         ctx.arc(g.x, g.y, g.r + 30, world.time * 12, world.time * 12 + 3);
         ctx.stroke();
       }
-      if (img) this.up.image(gx, gy, img, g.r * 2.6, g.r * 2.6, -g.r * 1.1, g.hitFlash > 0 ? 0.6 : 1);
-      else this.up.text(gx, gy, g.def.glyph, { size: g.r, weight: '900' });
+      if (!sprite && !art) this.up.text(gx, gy, g.def.glyph, { size: g.r, weight: '900' });
       this.up.bar(g.x, g.y, 130, 12, g.hp / g.maxHp, '#ffd23f', g.r + 20, 'rgba(0,0,0,0.7)');
       this.up.text(g.x, g.y, g.def.name, { size: 18, dy: g.r + 42, stroke: 'rgba(0,0,0,0.7)' });
       if (g.downTimer > 0) this.up.text(g.x, g.y, 'DOWN', { size: 18, color: '#ffd23f', dy: -(g.r + 20) });
@@ -292,8 +340,9 @@ export class Renderer {
       ctx.beginPath();
       ctx.arc(hx + (h.faceX / fl) * (h.r + 6), y + (h.faceY / fl) * (h.r + 6), 6, 0, Math.PI * 2);
       ctx.fill();
-      const img = getImage('casters', h.def.id);
-      if (img) this.up.image(hx, y, img, h.r * 2.6, h.r * 2.6, -h.r * 1.1, hidden ? 0.65 : 1);
+      // フィールドの駒は背景抜き sprite があれば画像、無ければベクター（SPEC 7.4）
+      const sprite = casterSprite(h.def.id);
+      if (sprite) this.drawFoot(sprite, hx, y + h.r, h.r * 3.4, hidden ? 0.65 : 1);
       else this.up.text(hx, y, h.def.glyph, { size: 26, color: h.def.accent, alpha: hidden ? 0.65 : 1 });
       // HP/MP（正立のバー）
       this.up.bar(hx, y, 64, 9, h.hp / h.maxHp, h.team === this.viewTeam ? '#7CFC8A' : '#ff6b6b', h.r + 17.5);
@@ -516,31 +565,46 @@ export class Renderer {
   private drawMinions(world: World) {
     const { ctx } = this;
     const bb = this.camera.bounds();
+    const atk = MINION.attackInterval;
     for (const m of world.minions) {
       if (m.x < bb.x0 || m.x > bb.x1 || m.y < bb.y0 || m.y > bb.y1) continue;
       if (!world.isVisibleTo(m, this.viewTeam)) continue;
       const col = teamColor(m.team);
       const forming = m.squad.formTimer > 0 && !m.ramming;
-      const img = getImage('minions', `${m.team === this.viewTeam ? 'ally' : 'enemy'}_${m.big ? 'large' : 'small'}`);
+      // 攻撃直後・突撃中は2コマ目（_alt）
+      const alt = m.ramming || m.atkTimer > atk * 0.7;
+      const im = minionImg(m.team === this.viewTeam, m.big, alt);
       ctx.globalAlpha = m.downTimer > 0 ? 0.6 : 1;
-      ctx.fillStyle = m.hitFlash > 0 ? '#fff' : col;
-      ctx.beginPath();
-      if (img) {
-        ctx.arc(m.x, m.y, m.r * 0.9, 0, Math.PI * 2);
-      } else if (m.big) {
-        ctx.roundRect(m.x - m.r, m.y - m.r, m.r * 2, m.r * 2, 6);
+      if (im) {
+        // 足元の陣営色リング＋画像（大=1.0、小≈0.6 の倍率）
+        ctx.fillStyle = teamTint(m.team, 0.55);
+        ctx.strokeStyle = m.ramming ? '#ffd23f' : col;
+        ctx.lineWidth = m.ramming ? 4 : 2;
+        ctx.beginPath();
+        ctx.ellipse(m.x, m.y + m.r * 0.6, m.r * 1.1, m.r * 0.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        const h = MINION_ART_H * (m.big ? 1 : 0.6);
+        this.drawFoot(im, m.x, m.y + m.r * 0.6, h, m.hitFlash > 0 ? 0.55 : 1);
       } else {
-        // 進行方向に尖った形
-        const f = m.team === 0 ? -1 : 1;
-        ctx.moveTo(m.x, m.y + f * m.r * 1.2);
-        ctx.lineTo(m.x + m.r, m.y - f * m.r * 0.8);
-        ctx.lineTo(m.x - m.r, m.y - f * m.r * 0.8);
-        ctx.closePath();
+        ctx.fillStyle = m.hitFlash > 0 ? '#fff' : col;
+        ctx.beginPath();
+        if (m.big) {
+          ctx.roundRect(m.x - m.r, m.y - m.r, m.r * 2, m.r * 2, 6);
+        } else {
+          // 進行方向に尖った形
+          const f = m.team === 0 ? -1 : 1;
+          ctx.moveTo(m.x, m.y + f * m.r * 1.2);
+          ctx.lineTo(m.x + m.r, m.y - f * m.r * 0.8);
+          ctx.lineTo(m.x - m.r, m.y - f * m.r * 0.8);
+          ctx.closePath();
+        }
+        ctx.fill();
+        ctx.strokeStyle = m.ramming ? '#ffd23f' : 'rgba(0,0,0,0.55)';
+        ctx.lineWidth = m.ramming ? 4 : 2;
+        ctx.stroke();
+        if (m.big) this.up.text(m.x, m.y, '大', { size: 18, weight: '900', color: '#fff' });
       }
-      ctx.fill();
-      ctx.strokeStyle = m.ramming ? '#ffd23f' : 'rgba(0,0,0,0.55)';
-      ctx.lineWidth = m.ramming ? 4 : 2;
-      ctx.stroke();
       if (forming) {
         ctx.strokeStyle = 'rgba(255,255,255,0.7)';
         ctx.lineWidth = 2;
@@ -548,9 +612,8 @@ export class Renderer {
         ctx.arc(m.x, m.y, m.r + 6, 0, Math.PI * 2);
         ctx.stroke();
       }
-      if (img) this.up.image(m.x, m.y, img, m.r * 2.8, m.r * 2.8, -m.r * 1.2, m.downTimer > 0 ? 0.6 : 1);
-      else if (m.big) this.up.text(m.x, m.y, '大', { size: 18, weight: '900', color: '#fff' });
-      if (m.hp < m.maxHp) this.up.bar(m.x, m.y, m.r * 2, 5, m.hp / m.maxHp, '#7CFC8A', m.r + 7.5, 'rgba(0,0,0,0.6)');
+      const top = im ? MINION_ART_H * (m.big ? 1 : 0.6) - m.r * 0.6 : m.r;
+      if (m.hp < m.maxHp) this.up.bar(m.x, m.y, m.r * 2, 5, m.hp / m.maxHp, '#7CFC8A', top + 6, 'rgba(0,0,0,0.6)');
       ctx.globalAlpha = 1;
     }
   }
@@ -591,37 +654,11 @@ export class Renderer {
     }
   }
 
-  private drawBase(b: Base) {
+  private drawBase(b: Base, time: number) {
     const { ctx } = this;
     const col = teamColor(b.team);
-    // 門
-    if (b.gate) {
-      const g = b.gate;
-      const half = 135;
-      if (g.state !== 'open') {
-        ctx.fillStyle = g.state === 'closed' ? '#2a2d36' : '#3d4150';
-        ctx.fillRect(g.x - half, g.y - 14, half * 2, 28);
-        ctx.strokeStyle = col;
-        ctx.lineWidth = 5;
-        ctx.strokeRect(g.x - half, g.y - 14, half * 2, 28);
-        // 格子
-        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-        ctx.lineWidth = 3;
-        for (let x = g.x - half + 18; x < g.x + half; x += 22) {
-          ctx.beginPath();
-          ctx.moveTo(x, g.y - 12);
-          ctx.lineTo(x, g.y + 12);
-          ctx.stroke();
-        }
-        const label = g.kind === 'yukyu' ? '悠久門' : '刹那門';
-        const txt = g.state === 'opening' ? `${label} 開門 ${Math.ceil(g.timer)}s` : `${label} 🔒`;
-        this.up.text(g.x, g.y, txt, { size: 24, dy: 40, bg: 'rgba(0,0,0,0.6)' });
-      } else {
-        ctx.fillStyle = 'rgba(255,255,255,0.12)';
-        ctx.fillRect(g.x - half, g.y - 6, 26, 12);
-        ctx.fillRect(g.x + half - 26, g.y - 6, 26, 12);
-      }
-    }
+    // 刻の門（閉門中はダメージ無効）
+    if (b.gate) this.drawGate(b, time);
 
     if (!b.alive) {
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
@@ -631,66 +668,122 @@ export class Renderer {
       ctx.strokeStyle = 'rgba(255,255,255,0.15)';
       ctx.lineWidth = 4;
       ctx.stroke();
+      // 瓦礫として薄く残す
+      const im = baseImg(b.def.kind, b.team, this.viewTeam);
+      if (im) {
+        ctx.save();
+        ctx.filter = 'grayscale(1) brightness(0.45)';
+        this.drawFoot(im, b.x, b.y + b.r * 0.55, BASE_ART_H[b.def.kind] * 0.45, 0.6);
+        ctx.restore();
+      }
       return;
     }
     const flash = b.hitFlash > 0;
-    this.shadow(b.x, b.y, b.r * 1.05, b.r * 0.5, b.r * 0.5);
-    const img = getImage('bases', b.tier === 'castle' ? (b.team === this.viewTeam ? 'castle_ally' : 'castle_enemy') : b.def.kind);
     const KIND_NAME = { small: '小拠点', normal: '拠点', large: '大拠点', huge: '特大拠点', castle: '城' } as const;
-
-    if (b.tier === 'castle') {
-      // 城：塔の形
-      const r = b.r;
-      if (!img) {
-        ctx.fillStyle = flash ? '#fff' : col;
-        ctx.beginPath();
-        ctx.roundRect(b.x - r, b.y - r * 0.7, r * 2, r * 1.4, 16);
-        ctx.fill();
-        ctx.fillStyle = 'rgba(0,0,0,0.25)';
-        for (let i = -2; i <= 2; i++) ctx.fillRect(b.x + i * r * 0.4 - 12, b.y - r * 0.9, 24, 30);
-      }
-      if (img) this.up.image(b.x, b.y, img, r * 2.4, r * 2.4, -r * 0.9, flash ? 0.7 : 1);
-      else this.up.text(b.x, b.y, '城', { size: r * 0.7 });
-      return;
-    }
-    const sides = b.def.kind === 'small' ? 4 : b.def.kind === 'normal' ? 6 : b.def.kind === 'large' ? 8 : 10;
-    ctx.fillStyle = flash ? '#fff' : col;
+    const im = baseImg(b.def.kind, b.team, this.viewTeam);
+    // 陣営色の台座（自軍/敵軍の区別。画像は両軍共通のため）
+    ctx.fillStyle = teamTint(b.team, 0.45);
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 6;
     ctx.beginPath();
-    for (let i = 0; i < sides; i++) {
-      const a = (i / sides) * Math.PI * 2 - Math.PI / 2;
-      const px = b.x + Math.cos(a) * b.r;
-      const py = b.y + Math.sin(a) * b.r;
-      if (i === 0) ctx.moveTo(px, py);
-      else ctx.lineTo(px, py);
-    }
-    ctx.closePath();
+    ctx.ellipse(b.x, b.y + b.r * 0.4, b.r * 1.15, b.r * 0.55, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
-    ctx.lineWidth = 5;
     ctx.stroke();
-    // HPリング
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-    ctx.lineWidth = 10;
-    ctx.beginPath();
-    ctx.arc(b.x, b.y, b.r * 0.62, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.strokeStyle = '#7CFC8A';
-    ctx.beginPath();
-    ctx.arc(b.x, b.y, b.r * 0.62, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * b.hp) / b.maxHp);
-    ctx.stroke();
-    if (img) this.up.image(b.x, b.y, img, b.r * 2.2, b.r * 2.2, -b.r * 0.9, flash ? 0.7 : 1);
-    const label = { small: '小', normal: '拠', large: '大', huge: '特', castle: '城' }[b.def.kind];
-    if (!img) this.up.text(b.x, b.y, label, { size: Math.round(b.r * 0.55) });
-    this.up.text(b.x, b.y, KIND_NAME[b.def.kind], { size: 18, dy: -(b.r + 18), stroke: 'rgba(0,0,0,0.7)' });
+    const artH = BASE_ART_H[b.def.kind];
+    if (im) {
+      this.drawFoot(im, b.x, b.y + b.r * 0.55, artH, 1);
+      if (flash) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        this.drawFoot(im, b.x, b.y + b.r * 0.55, artH, 0.35);
+        ctx.restore();
+      }
+    } else if (b.tier === 'castle') {
+      const r = b.r;
+      ctx.fillStyle = flash ? '#fff' : col;
+      ctx.beginPath();
+      ctx.roundRect(b.x - r, b.y - r * 0.7, r * 2, r * 1.4, 16);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      for (let i = -2; i <= 2; i++) ctx.fillRect(b.x + i * r * 0.4 - 12, b.y - r * 0.9, 24, 30);
+      this.up.text(b.x, b.y, '城', { size: r * 0.7 });
+    } else {
+      const sides = b.def.kind === 'small' ? 4 : b.def.kind === 'normal' ? 6 : b.def.kind === 'large' ? 8 : 10;
+      ctx.fillStyle = flash ? '#fff' : col;
+      ctx.beginPath();
+      for (let i = 0; i < sides; i++) {
+        const a = (i / sides) * Math.PI * 2 - Math.PI / 2;
+        const px = b.x + Math.cos(a) * b.r;
+        const py = b.y + Math.sin(a) * b.r;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+      ctx.lineWidth = 5;
+      ctx.stroke();
+      const label = { small: '小', normal: '拠', large: '大', huge: '特', castle: '城' }[b.def.kind];
+      this.up.text(b.x, b.y, label, { size: Math.round(b.r * 0.55) });
+    }
+    const top = im ? artH - b.r * 0.55 : b.r;
+    if (b.tier !== 'castle') this.up.bar(b.x, b.y, b.r * 1.8, 10, b.hp / b.maxHp, b.team === this.viewTeam ? '#7CFC8A' : '#ff6b6b', top + 10);
+    this.up.text(b.x, b.y, KIND_NAME[b.def.kind], { size: 18, dy: -(b.r + 22), stroke: 'rgba(0,0,0,0.75)', color: col === '#fff' ? '#fff' : '#fff' });
     if (b.gate && b.gate.state !== 'open') {
       // 無敵（門が閉じている）表示
       ctx.strokeStyle = 'rgba(200,220,255,0.7)';
       ctx.lineWidth = 4;
       ctx.setLineDash([10, 8]);
       ctx.beginPath();
-      ctx.arc(b.x, b.y, b.r + 12, 0, Math.PI * 2);
+      ctx.arc(b.x, b.y, b.r + 14, 0, Math.PI * 2);
       ctx.stroke();
       ctx.setLineDash([]);
+    }
+  }
+
+  /** 刻の門。閉門中は画像、開門時は左右へ割れるマスクで抜く（scaleY は使わない）。 */
+  private drawGate(b: Base, time: number) {
+    const { ctx } = this;
+    const g = b.gate!;
+    const col = teamColor(b.team);
+    const im = gateImg(g.kind);
+    // 画像は正方形に近いので、レーン幅より少し狭く描いて前方の視界を確保
+    const half = im ? LANE_WIDTH * 0.36 : LANE_WIDTH / 2 + 10;
+    const OPEN_ANIM = 0.9;
+    const openK = g.state === 'open' ? Math.min(1, (time - (g.openedAt ?? -99)) / OPEN_ANIM) : 0;
+    if (g.state === 'open' && openK >= 1) return;
+    const w = half * 2;
+    const h = im ? (w * im.height) / im.width : 28;
+    const foot = g.y + 14;
+    if (im) {
+      ctx.save();
+      if (openK > 0) {
+        // マスク：中央から左右へ開く
+        const gap = (w / 2) * openK;
+        ctx.beginPath();
+        ctx.rect(g.x - half, foot - h, half - gap, h);
+        ctx.rect(g.x + gap, foot - h, half - gap, h);
+        ctx.clip();
+        ctx.globalAlpha = 1 - openK * 0.5;
+      }
+      ctx.drawImage(im, g.x - half, foot - h, w, h);
+      ctx.restore();
+      // 陣営色の敷居（レーン全幅を塞ぐ＝壁として機能）
+      if (openK <= 0) {
+        ctx.fillStyle = col;
+        ctx.fillRect(g.x - LANE_WIDTH / 2, g.y + 6, LANE_WIDTH, 10);
+      }
+    } else if (openK <= 0) {
+      ctx.fillStyle = g.state === 'closed' ? '#2a2d36' : '#3d4150';
+      ctx.fillRect(g.x - half, g.y - 14, w, 28);
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 5;
+      ctx.strokeRect(g.x - half, g.y - 14, w, 28);
+    }
+    if (g.state !== 'open') {
+      const label = g.kind === 'yukyu' ? '悠久門' : '刹那門';
+      const txt = g.state === 'opening' ? `${label} 開門 ${Math.ceil(g.timer)}s` : `${label} 🔒`;
+      this.up.text(g.x, g.y, txt, { size: 22, dy: (im ? h : 28) + 4, bg: 'rgba(0,0,0,0.65)' });
     }
   }
 }

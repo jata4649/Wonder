@@ -143,7 +143,7 @@ export const CASTERS: CasterDef[] = [
     glyph: '兎',
   },
   {
-    id: 'garasu',
+    id: 'garasunokutsu',
     name: 'ガラスの靴',
     role: 'support',
     desc: '投擲型。着弾点を指定して円形範囲を落とす。減衰なし・壁越し可・対拠点ダメージが高い。着弾点は相手にも見える。',
@@ -193,7 +193,7 @@ export const CASTERS: CasterDef[] = [
     glyph: '燕',
   },
   {
-    id: 'onryo',
+    id: 'onryou',
     name: 'オンリョウ',
     role: 'fighter',
     desc: '突撃型。地面を滑って突進し、2回の攻撃判定を持つ。減衰なし・大兵士にも遮られない。',
