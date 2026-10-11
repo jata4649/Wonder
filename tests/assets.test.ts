@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ASSETS } from '../src/config/assets';
-import { CASTERS } from '../src/config/casters';
+import { ASSETS } from '../shared/config/assets';
+import { CASTERS } from '../shared/config/casters';
 import { img, resolveAsset } from '../src/render/assets';
 import { existsSync } from 'node:fs';
 

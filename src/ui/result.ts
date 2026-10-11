@@ -1,7 +1,7 @@
 // リザルト画面。
-import type { World } from '../sim/world';
+import type { World } from '../../shared/sim/world';
 import { teamColor } from '../config/settings';
-import { ASSETS } from '../config/assets';
+import { ASSETS } from '../../shared/config/assets';
 import { assetUrl } from '../render/assets';
 
 const iconOf = (id: string) => assetUrl(ASSETS.casters[id]?.icon);

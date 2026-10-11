@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { HERO, MINION, ROLE_DECAY } from '../src/config/balance';
-import { CASTER_BY_ID } from '../src/config/casters';
+import { HERO, MINION, ROLE_DECAY } from '../shared/config/balance';
+import { CASTER_BY_ID } from '../shared/config/casters';
 import { DrawGesture } from '../src/input/drawGesture';
 import { Camera } from '../src/render/camera';
-import { spawnSquad } from '../src/sim/minions';
-import { buildProfile, decayFactor } from '../src/sim/projectiles/drawshot';
-import { World } from '../src/sim/world';
+import { spawnSquad } from '../shared/sim/minions';
+import { buildProfile, decayFactor } from '../shared/sim/projectiles/drawshot';
+import { World } from '../shared/sim/world';
 
 const lo = (id: string) => ({ casterId: id, skillIds: [], assistIds: [], soulId: '' });
 const run = (w: World, sec: number) => {

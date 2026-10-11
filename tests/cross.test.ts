@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { CROSS } from '../src/config/balance';
-import { CASTER_BY_ID } from '../src/config/casters';
-import { World } from '../src/sim/world';
+import { CROSS } from '../shared/config/balance';
+import { CASTER_BY_ID } from '../shared/config/casters';
+import { World } from '../shared/sim/world';
 
 const lo = (id: string) => ({ casterId: id, skillIds: [], assistIds: [], soulId: '' });
 const line = (x0: number, y0: number, x1: number, y1: number, n = 20) =>

@@ -1,10 +1,10 @@
 // 右下のスキルカード（タップで発動）。MP・クールダウン・解禁レベルを表示。
-import { XP } from '../config/balance';
-import type { SkillDef } from '../config/types';
-import { skillReady, wonderReady } from '../sim/effects';
-import type { Hero } from '../sim/units/hero';
-import type { World } from '../sim/world';
-import { ASSETS } from '../config/assets';
+import { XP } from '../../shared/config/balance';
+import type { SkillDef } from '../../shared/config/types';
+import { skillReady, wonderReady } from '../../shared/sim/effects';
+import type { Hero } from '../../shared/sim/units/hero';
+import type { World } from '../../shared/sim/world';
+import { ASSETS } from '../../shared/config/assets';
 import { assetUrl } from '../render/assets';
 
 export class Cards {

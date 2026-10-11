@@ -1,15 +1,15 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { CASTERS, CASTER_BY_ID } from '../src/config/casters';
-import { CASTLE_POS, LANE_X, PLAY_X0, PLAY_X1 } from '../src/config/map';
-import { CAM, MINION } from '../src/config/balance';
+import { CASTERS, CASTER_BY_ID } from '../shared/config/casters';
+import { CASTLE_POS, LANE_X, PLAY_X0, PLAY_X1 } from '../shared/config/map';
+import { CAM, MINION } from '../shared/config/balance';
 import { orient } from '../src/input/orientation';
 import { DrawGesture } from '../src/input/drawGesture';
 import { Camera } from '../src/render/camera';
 import { UprightQueue } from '../src/render/uprightText';
-import { spawnGiant } from '../src/sim/giants';
-import { cullMinions, spawnSquad } from '../src/sim/minions';
-import { SOULS } from '../src/config/assists';
-import { World } from '../src/sim/world';
+import { spawnGiant } from '../shared/sim/giants';
+import { cullMinions, spawnSquad } from '../shared/sim/minions';
+import { SOULS } from '../shared/config/assists';
+import { World } from '../shared/sim/world';
 
 const landCam = () => {
   orient.land = true;

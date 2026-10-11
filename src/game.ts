@@ -1,13 +1,13 @@
 // 1試合ぶんのセッション：World・入力・描画・UI をまとめる。
-import { MATCH } from './config/balance';
+import { MATCH } from '../shared/config/balance';
 import { settings } from './config/settings';
-import type { Difficulty, Loadout } from './config/types';
-import { setupMatch } from './ai/setup';
+import type { Difficulty, Loadout } from '../shared/config/types';
+import { setupMatch } from '../shared/ai/setup';
 import { InputManager } from './input/touch';
 import { Effects } from './render/effects';
 import type { Renderer } from './render/renderer';
-import type { Hero } from './sim/units/hero';
-import { World } from './sim/world';
+import type { Hero } from '../shared/sim/units/hero';
+import { World } from '../shared/sim/world';
 import { Cards } from './ui/cards';
 import { Controls } from './ui/controls';
 import { showResult } from './ui/result';

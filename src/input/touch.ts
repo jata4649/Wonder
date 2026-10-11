@@ -1,8 +1,8 @@
 // 入力の振り分け：左=移動、右=攻撃（マルチタッチは pointerId で管理）。
 // 同じ側に2本目の指が触れたら2本指カメラパンに切り替える。
 import type { Camera } from '../render/camera';
-import type { Hero } from '../sim/units/hero';
-import type { World } from '../sim/world';
+import type { Hero } from '../../shared/sim/units/hero';
+import type { World } from '../../shared/sim/world';
 import { DrawGesture } from './drawGesture';
 import { VirtualStick } from './virtualStick';
 

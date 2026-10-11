@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { HeroAI } from '../src/ai/heroAI';
-import { assignLanes } from '../src/ai/laneAssign';
-import { nextWaypoint } from '../src/ai/nav';
-import { setupMatch } from '../src/ai/setup';
-import { AI_DIFFICULTY } from '../src/config/balance';
-import { CASTLE_POS } from '../src/config/map';
-import { World } from '../src/sim/world';
+import { HeroAI } from '../shared/ai/heroAI';
+import { assignLanes } from '../shared/ai/laneAssign';
+import { nextWaypoint } from '../shared/ai/nav';
+import { setupMatch } from '../shared/ai/setup';
+import { AI_DIFFICULTY } from '../shared/config/balance';
+import { CASTLE_POS } from '../shared/config/map';
+import { World } from '../shared/sim/world';
 
 describe('AI', () => {
   it('レーン割り当て：全レーンを埋め、ファイターは端、サポーターは中央', () => {

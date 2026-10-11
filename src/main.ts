@@ -3,7 +3,7 @@ import { tryLockLandscape } from './input/orientation';
 import { preloadAssets } from './render/assets';
 import { Renderer } from './render/renderer';
 import { updateOrientationOverlay } from './ui/orientationOverlay';
-import { spawnSquad } from './sim/minions';
+import { spawnSquad } from '../shared/sim/minions';
 import { defaultLoadout, showTitle, type TitleResult } from './ui/screens/title';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;

@@ -1,9 +1,9 @@
 // 右下の操作UI（回避ボタン・カード）。キャンバスとは別レイヤ（pointer-events 有り）。
 import type { InputManager } from '../input/touch';
-import type { Hero } from '../sim/units/hero';
+import type { Hero } from '../../shared/sim/units/hero';
 import type { Camera } from '../render/camera';
-import type { PingKind } from '../sim/world';
-import { ASSETS } from '../config/assets';
+import type { PingKind } from '../../shared/sim/world';
+import { ASSETS } from '../../shared/config/assets';
 import { assetUrl } from '../render/assets';
 
 const PING_ICON = { gather: 'iconFlag', retreat: 'iconArrow', caution: 'iconAlert', enemy: 'iconExtra' } as const;

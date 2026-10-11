@@ -1,5 +1,5 @@
-import { CAM, CAMERA } from '../config/balance';
-import { PLAY_X0, PLAY_X1, WORLD_H, WORLD_W } from '../config/map';
+import { CAM, CAMERA } from '../../shared/config/balance';
+import { PLAY_X0, PLAY_X1, WORLD_H, WORLD_W } from '../../shared/config/map';
 import { orient } from '../input/orientation';
 
 /**

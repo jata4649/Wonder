@@ -1,10 +1,10 @@
 // ミニマップ（右上）。タップで拡大／もう一度タップで戻す。
 // 敵は「味方の視界（キャスト・兵士・拠点）」に入っていて、かつ森に隠れていないものだけ表示。
-import { FOREST_STRIPS, FOREST_Y0, FOREST_Y1, LANE_WIDTH, LANE_X, PLAY_X0, PLAY_X1, PLAY_Y0, PLAY_Y1 } from '../config/map';
+import { FOREST_STRIPS, FOREST_Y0, FOREST_Y1, LANE_WIDTH, LANE_X, PLAY_X0, PLAY_X1, PLAY_Y0, PLAY_Y1 } from '../../shared/config/map';
 import { teamColor } from '../config/settings';
-import type { Team } from '../config/types';
-import type { Mob } from '../sim/units/types';
-import type { World } from '../sim/world';
+import type { Team } from '../../shared/config/types';
+import type { Mob } from '../../shared/sim/units/types';
+import type { World } from '../../shared/sim/world';
 import type { Camera } from './camera';
 import { safeTop, topBarHeight } from './hud';
 import { orient } from '../input/orientation';

@@ -1,12 +1,12 @@
 // キャンバス上の HUD。横画面の画面構成（SPEC 1.2）に従ってゾーンを分ける：
 //  上部バー（自軍ゲージ｜残り時間｜敵軍ゲージ）、左上＝レーン状況→ソウル→レベル、右上＝ミニマップ、左下＝自キャスト情報。
-import { MATCH } from '../config/balance';
+import { MATCH } from '../../shared/config/balance';
 import { teamColor } from '../config/settings';
-import type { LaneId, Team } from '../config/types';
+import type { LaneId, Team } from '../../shared/config/types';
 import { laneName, orient } from '../input/orientation';
-import type { Hero } from '../sim/units/hero';
+import type { Hero } from '../../shared/sim/units/hero';
 import { casterIcon, uiImg } from './assets';
-import type { World } from '../sim/world';
+import type { World } from '../../shared/sim/world';
 
 export function fmtTime(sec: number) {
   const s = Math.ceil(sec);

@@ -1,10 +1,10 @@
 // タイトル＆編成画面：キャスト選択 → スキル5つから3つ装備 → アシスト4枠 → ソウル → 難易度。
-import { ASSISTS, SOULS } from '../../config/assists';
-import { CASTERS, CASTER_BY_ID } from '../../config/casters';
+import { ASSISTS, SOULS } from '../../../shared/config/assists';
+import { CASTERS, CASTER_BY_ID } from '../../../shared/config/casters';
 import { saveSettings, settings, teamColor } from '../../config/settings';
-import { ASSETS } from '../../config/assets';
+import { ASSETS } from '../../../shared/config/assets';
 import { assetUrl } from '../../render/assets';
-import type { Difficulty, Loadout } from '../../config/types';
+import type { Difficulty, Loadout } from '../../../shared/config/types';
 
 const KEY = 'otogi-arena-loadout';
 const ROLE_LABEL = { fighter: 'ファイター', attacker: 'アタッカー', support: 'サポーター' } as const;

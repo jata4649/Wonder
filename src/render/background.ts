@@ -12,9 +12,9 @@ import {
   WORLD_H,
   WORLD_W,
   type WallDef,
-} from '../config/map';
+} from '../../shared/config/map';
 import { teamTint } from '../config/settings';
-import { makeRng } from '../sim/geom';
+import { makeRng } from '../../shared/sim/geom';
 
 export const BG_SCALE = 0.5;
 /** 背景タイルがあるときは細部が見えるよう解像度を上げる。 */

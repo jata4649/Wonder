@@ -1,7 +1,7 @@
 // 一時的な演出（爆風・薙ぎ払い・ダメージ数字など）。sim のイベントから生成。
 import { teamColor } from '../config/settings';
-import type { Team } from '../config/types';
-import type { GameEvent } from '../sim/world';
+import type { Team } from '../../shared/config/types';
+import type { GameEvent } from '../../shared/sim/world';
 import type { Camera } from './camera';
 import { laneName } from '../input/orientation';
 import type { UprightQueue } from './uprightText';

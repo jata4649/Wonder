@@ -1,6 +1,6 @@
 // 実行時設定（ローカル保存）。
-import { MATCH } from './balance';
-import type { Team } from './types';
+import { MATCH } from '../../shared/config/balance';
+import type { Team } from '../../shared/config/types';
 
 export interface Settings {
   /** false: 自軍＝赤（原作準拠・既定） / true: 自軍＝青 */

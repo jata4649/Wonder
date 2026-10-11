@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { MINION, XP } from '../src/config/balance';
-import { damageMob } from '../src/sim/combat';
-import { spawnSquad } from '../src/sim/minions';
-import { World } from '../src/sim/world';
+import { MINION, XP } from '../shared/config/balance';
+import { damageMob } from '../shared/sim/combat';
+import { spawnSquad } from '../shared/sim/minions';
+import { World } from '../shared/sim/world';
 
 const run = (w: World, sec: number) => {
   for (let i = 0; i < sec * 60; i++) w.step(1 / 60);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { setupMatch } from '../src/ai/setup';
-import type { Difficulty } from '../src/config/types';
-import { World } from '../src/sim/world';
+import { setupMatch } from '../shared/ai/setup';
+import type { Difficulty } from '../shared/config/types';
+import { World } from '../shared/sim/world';
 
 export function simulateMatch(seed: number, diff: Difficulty) {
   const w = new World({ seed });

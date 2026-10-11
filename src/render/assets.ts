@@ -2,8 +2,8 @@
 // - ロード前・失敗時は undefined を返し、呼び出し側がベクター描画にフォールバックする（そのキーだけ）。
 // - dpr >= 2 では `@2x` を優先し、無ければ等倍（resolveAsset）。
 // - premultiplyAlpha を無効にしてデコード（透過PNGの縁が暗くならないように）。
-import { ASSETS } from '../config/assets';
-import type { BaseKind, GiantType, Team } from '../config/types';
+import { ASSETS } from '../../shared/config/assets';
+import type { BaseKind, GiantType, Team } from '../../shared/config/types';
 
 export type Img = HTMLImageElement | ImageBitmap;
 type Entry = { state: 'loading' | 'ok' | 'failed'; img?: Img };

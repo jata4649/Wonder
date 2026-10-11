@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { ASSISTS, SOULS } from '../src/config/assists';
-import { CASTERS } from '../src/config/casters';
-import { EFFECT_IDS, wonderReady } from '../src/sim/effects';
-import { World, assistActive } from '../src/sim/world';
+import { ASSISTS, SOULS } from '../shared/config/assists';
+import { CASTERS } from '../shared/config/casters';
+import { EFFECT_IDS, wonderReady } from '../shared/sim/effects';
+import { World, assistActive } from '../shared/sim/world';
 
 const run = (w: World, sec: number) => {
   for (let i = 0; i < sec * 60; i++) w.step(1 / 60);

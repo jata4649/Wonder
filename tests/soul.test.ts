@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { SOUL } from '../src/config/balance';
-import { SOULS } from '../src/config/assists';
-import { damageBase } from '../src/sim/combat';
-import { spawnGiant } from '../src/sim/giants';
-import { spawnSquad } from '../src/sim/minions';
-import { World } from '../src/sim/world';
+import { SOUL } from '../shared/config/balance';
+import { SOULS } from '../shared/config/assists';
+import { damageBase } from '../shared/sim/combat';
+import { spawnGiant } from '../shared/sim/giants';
+import { spawnSquad } from '../shared/sim/minions';
+import { World } from '../shared/sim/world';
 
 const run = (w: World, sec: number) => {
   for (let i = 0; i < sec * 60; i++) w.step(1 / 60);

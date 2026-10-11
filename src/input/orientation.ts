@@ -1,6 +1,6 @@
 // 画面の向き。ワールドは回転しない（SPEC 1.1）。横画面では縦長の盤面を
 // 「フィールド幅＝画面幅」で表示し、カメラを上下（y）に送る。自陣が下・敵陣が上、レーンは上下に走る。
-import type { LaneId } from '../config/types';
+import type { LaneId } from '../../shared/config/types';
 
 export const orient = {
   /** 横画面か（innerWidth > innerHeight） */

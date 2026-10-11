@@ -2,12 +2,12 @@
 // - 短タップ：近くの敵にオート照準のストレートショット
 // - 自キャストに指を戻して離す：キャンセル
 // - 描線長を超えた瞬間に自動発動（以後は戻せない）
-import { HERO } from '../config/balance';
+import { HERO } from '../../shared/config/balance';
 import type { Camera } from '../render/camera';
-import type { Vec } from '../sim/geom';
-import { pathLength } from '../sim/projectiles/drawshot';
-import { clampToCircle, type Hero } from '../sim/units/hero';
-import type { World } from '../sim/world';
+import type { Vec } from '../../shared/sim/geom';
+import { pathLength } from '../../shared/sim/projectiles/drawshot';
+import { clampToCircle, type Hero } from '../../shared/sim/units/hero';
+import type { World } from '../../shared/sim/world';
 
 const TAP_MOVE_PX = 14;
 const TAP_MAX_MS = 320;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { BASES, GAUGE, MATCH } from '../src/config/balance';
-import { damageBase } from '../src/sim/combat';
-import { World } from '../src/sim/world';
+import { BASES, GAUGE, MATCH } from '../shared/config/balance';
+import { damageBase } from '../shared/sim/combat';
+import { World } from '../shared/sim/world';
 
 describe('チームゲージと勝敗', () => {
   it('序列：拠点破壊 > 拠点への（全耐久分の）ダメージ > キャスト撃破', () => {
