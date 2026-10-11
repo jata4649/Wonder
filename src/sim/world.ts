@@ -22,6 +22,7 @@ import {
 } from './projectiles/drawshot';
 import { Hero, type Buff } from './units/hero';
 import type { Minion, Mob, Squad } from './units/types';
+import { TeamProgress, dropOrb, updateOrbs, type XpOrb } from './xp';
 
 export type GameEvent =
   | { type: 'gateOpen'; base: Base }
@@ -34,7 +35,8 @@ export type GameEvent =
   | { type: 'chain'; hero: Hero; count: number; xp: number }
   | { type: 'heal'; x: number; y: number; amount: number; team: Team }
   | { type: 'skill'; hero: Hero; skill: SkillDef }
-  | { type: 'wonder'; hero: Hero };
+  | { type: 'wonder'; hero: Hero }
+  | { type: 'levelUp'; team: Team; level: number };
 
 export interface CrossResult {
   crossed: boolean;
@@ -59,6 +61,8 @@ export class World {
   drawShots: DrawProjectile[] = [];
   lobs: LobShell[] = [];
   straightShots: StraightShot[] = [];
+  orbs: XpOrb[] = [];
+  progress: [TeamProgress, TeamProgress] = [new TeamProgress(), new TeamProgress()];
   grid = new SpatialGrid<Mob>();
   events: GameEvent[] = [];
   match = new MatchState();
@@ -123,8 +127,12 @@ export class World {
   }
 
   // ---- 成長（M5/M6 で拡張） ----
-  teamLevel(_team: Team): number {
-    return 1;
+  teamLevel(team: Team): number {
+    return this.progress[team].level;
+  }
+  /** チーム共有の経験値を加算。 */
+  addTeamXp(team: Team, v: number) {
+    if (this.progress[team].add(v) > 0) this.emit({ type: 'levelUp', team, level: this.progress[team].level });
   }
   /** アシスト（チームレベル到達で発動、4枠目は Lv6 以上）とソウルの補正合計。 */
   statMods(h: Hero, key: StatKey): number {
@@ -150,6 +158,7 @@ export class World {
     m.slowT = Math.max(m.slowT, dur);
   }
   onChainBonus(h: Hero, count: number, xp: number) {
+    this.addTeamXp(h.team, xp);
     this.emit({ type: 'chain', hero: h, count, xp });
   }
   addBuff(h: Hero, b: Buff) {
@@ -212,7 +221,12 @@ export class World {
   onMobDamaged(m: Mob, dealt: number, src: DamageSource, opts: HitOpts) {
     if (dealt > 0) this.emit({ type: 'damage', x: m.x, y: m.y - m.r, amount: dealt, team: src.team, fx: opts.fx });
   }
-  onMobKilled(m: Mob, src: DamageSource, _opts: HitOpts) {
+  onMobKilled(m: Mob, src: DamageSource, opts: HitOpts) {
+    // 経験値ドロップ（体当たりで消えた兵士は出さない）
+    if (!opts.noXp) {
+      const v = m.kind === 'minion' ? (m as Minion).xp : m.kind === 'hero' ? XP.heroXp : XP.giantXp;
+      dropOrb(this, src.team, m.x, m.y, v);
+    }
     if (m.kind === 'hero') {
       const h = m as Hero;
       h.die();
@@ -276,6 +290,7 @@ export class World {
     updateDrawProjectiles(this, this.drawShots, dt);
     updateLobs(this, this.lobs, dt);
     updateStraightShots(this, this.straightShots, dt);
+    updateOrbs(this, dt);
     this.bolts = this.bolts.filter((b) => b.alive);
     this.drawShots = this.drawShots.filter((p) => p.alive);
     this.lobs = this.lobs.filter((p) => p.alive);

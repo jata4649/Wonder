@@ -1,7 +1,7 @@
 // Canvas2D レンダラ。World を読むだけで、World を書き換えない。
 import { renderBackground } from './background';
 import { Camera } from './camera';
-import { drawTopBar } from './hud';
+import { drawLevel, drawTopBar } from './hud';
 import { WORLD_H, WORLD_W } from '../config/map';
 import { teamColor, teamTint } from '../config/settings';
 import type { Base } from '../sim/bases';
@@ -63,6 +63,7 @@ export class Renderer {
     this.drawDoors(world);
     for (const b of world.bases) this.drawBase(b);
     this.drawLobMarkers(world);
+    this.drawOrbs(world);
     this.drawMinions(world);
     this.drawHeroes(world, view.player);
     this.drawBolts(world);
@@ -76,8 +77,30 @@ export class Renderer {
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     if (view.player && view.input?.gesture.active && view.player.drawStance) this.drawRangeShade(view.player);
     drawTopBar(ctx, world, this.camera.viewW);
+    drawLevel(ctx, world, this.viewTeam, this.camera.viewW);
     if (view.input) this.drawStick(view.input);
     if (view.player?.notice) this.drawNotice(view.player.notice.text);
+    view.fx?.drawScreen(ctx, this.camera.viewW, this.camera.viewH);
+  }
+
+  private drawOrbs(world: World) {
+    const { ctx } = this;
+    const bb = this.camera.bounds();
+    const pulse = 1 + Math.sin(world.time * 8) * 0.15;
+    for (const o of world.orbs) {
+      if (o.x < bb.x0 || o.x > bb.x1 || o.y < bb.y0 || o.y > bb.y1) continue;
+      const s = (7 + Math.min(8, o.value * 2)) * pulse;
+      ctx.globalAlpha = o.t < 3 ? 0.4 + 0.6 * Math.abs(Math.sin(o.t * 10)) : 1;
+      ctx.fillStyle = o.team === this.viewTeam ? '#7cf0ff' : '#c9a3ff';
+      ctx.beginPath();
+      ctx.moveTo(o.x, o.y - s);
+      ctx.lineTo(o.x + s * 0.7, o.y);
+      ctx.lineTo(o.x, o.y + s);
+      ctx.lineTo(o.x - s * 0.7, o.y);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
   }
 
   // ---- キャスト ----

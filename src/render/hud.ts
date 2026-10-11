@@ -1,6 +1,7 @@
 // キャンバス上の HUD（ゲージ・タイマーなど）。
 import { MATCH } from '../config/balance';
 import { teamColor } from '../config/settings';
+import type { Team } from '../config/types';
 import type { World } from '../sim/world';
 
 export function fmtTime(sec: number) {
@@ -49,4 +50,28 @@ export function safeTop() {
     cachedSafeTop = parseInt(v) || 0;
   }
   return cachedSafeTop;
+}
+
+/** チームレベルと経験値バー（左上・ソウルゲージの下）。 */
+export function drawLevel(ctx: CanvasRenderingContext2D, world: World, team: Team, _w: number) {
+  const p = world.progress[team];
+  const ep = world.progress[(1 - team) as Team];
+  const x = 10;
+  const y = 48 + safeTop();
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.beginPath();
+  ctx.roundRect(x, y, 128, 34, 8);
+  ctx.fill();
+  ctx.fillStyle = '#ffd23f';
+  ctx.font = '900 16px system-ui, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`Lv${p.level}`, x + 8, y + 13);
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.font = '11px system-ui, sans-serif';
+  ctx.fillText(`敵Lv${ep.level}`, x + 76, y + 13);
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.fillRect(x + 8, y + 24, 112, 5);
+  ctx.fillStyle = '#7cf0ff';
+  ctx.fillRect(x + 8, y + 24, 112 * p.progress(), 5);
 }

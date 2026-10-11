@@ -5,7 +5,7 @@ import type { GameEvent } from '../sim/world';
 import type { Camera } from './camera';
 
 interface Fx {
-  kind: 'ring' | 'sweep' | 'num' | 'text' | 'spark';
+  kind: 'ring' | 'sweep' | 'num' | 'text' | 'spark' | 'banner';
   x: number;
   y: number;
   r: number;
@@ -51,10 +51,20 @@ export class Effects {
           });
           break;
         }
-        case 'baseDestroyed':
+        case 'baseDestroyed': {
           this.add({ kind: 'ring', x: e.base.x, y: e.base.y, r: 260, t: 0, T: 0.8, color: '#ffd23f' });
           camera.addShake(14);
+          const lane = ['左', '中央', '右'][e.base.lane as number] ?? '';
+          const own = e.base.team === this.viewTeam;
+          this.banner(`${own ? '自軍' : '敵軍'}${lane}${e.base.tier === 'front' ? '手前' : '奥'}拠点 陥落`, own ? '#ff8080' : '#ffd23f');
           break;
+        }
+        case 'gateOpen': {
+          const own = e.base.team === this.viewTeam;
+          const lane = ['左', '中央', '右'][e.base.lane as number] ?? '';
+          this.banner(`${own ? '自軍' : '敵軍'}${lane}の${e.base.gate?.kind === 'yukyu' ? '悠久門' : '刹那門'}が開いた`, '#cfe3ff');
+          break;
+        }
         case 'heroKilled':
           this.add({ kind: 'ring', x: e.hero.x, y: e.hero.y, r: 120, t: 0, T: 0.5, color: '#fff' });
           if (e.hero.id === playerId) camera.addShake(10);
@@ -72,6 +82,14 @@ export class Effects {
             size: 26,
           });
           break;
+        case 'levelUp':
+          if (e.team === this.viewTeam) {
+            this.add({ kind: 'banner', x: 0, y: 0, r: 0, t: 0, T: 1.6, color: '#ffd23f', text: `チームレベル ${e.level}!`, size: 30 });
+          }
+          break;
+        case 'heal':
+          this.add({ kind: 'num', x: e.x, y: e.y - 30, r: 0, t: 0, T: 0.8, color: '#7CFC8A', text: `+${Math.round(e.amount)}`, size: 22 });
+          break;
         default:
           break;
       }
@@ -88,8 +106,34 @@ export class Effects {
     this.list = this.list.filter((f) => f.t < f.T);
   }
 
+  /** 画面座標で描く告知（バナー）。 */
+  drawScreen(ctx: CanvasRenderingContext2D, w: number, h: number) {
+    let row = 0;
+    for (const f of this.list) {
+      if (f.kind !== 'banner') continue;
+      const k = f.t / f.T;
+      ctx.globalAlpha = k < 0.15 ? k / 0.15 : k > 0.75 ? (1 - k) / 0.25 : 1;
+      const y = h * 0.24 + row * 46;
+      ctx.font = `900 ${f.size}px system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const tw = ctx.measureText(f.text!).width + 40;
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(w / 2 - tw / 2, y - 22, tw, 44);
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.text!, w / 2, y);
+      row++;
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  banner(text: string, color = '#fff', T = 1.8) {
+    this.add({ kind: 'banner', x: 0, y: 0, r: 0, t: 0, T, color, text, size: 26 });
+  }
+
   draw(ctx: CanvasRenderingContext2D) {
     for (const f of this.list) {
+      if (f.kind === 'banner') continue;
       const k = f.t / f.T;
       ctx.globalAlpha = 1 - k;
       switch (f.kind) {
