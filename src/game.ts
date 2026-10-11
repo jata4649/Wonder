@@ -1,6 +1,7 @@
 // 1試合ぶんのセッション：World・入力・描画・UI をまとめる。
 import { MATCH } from './config/balance';
 import type { Difficulty, Loadout } from './config/types';
+import { setupMatch } from './ai/setup';
 import { InputManager } from './input/touch';
 import { Effects } from './render/effects';
 import type { Renderer } from './render/renderer';
@@ -36,7 +37,7 @@ export class Game {
     private onExit: (again: boolean) => void,
   ) {
     this.world = new World({ seed: opts.seed ?? (Date.now() & 0xffff) });
-    this.player = this.world.addHero(opts.loadout, 0, true, 1);
+    this.player = setupMatch(this.world, opts.loadout, opts.difficulty).player!;
     this.input = new InputManager(renderer.canvas, renderer.camera, () => this.player, () => this.world);
     this.controls = new Controls(uiRoot, this.input, () => this.player);
     this.cards = new Cards(uiRoot, this.player, () => this.world);

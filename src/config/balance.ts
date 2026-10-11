@@ -98,7 +98,7 @@ export const XP = {
   heroXp: 6,
   giantXp: 20,
   /** チームレベル到達に必要な累計経験値。index=レベル-1。 */
-  levelThresholds: [0, 8, 20, 36, 56, 80, 108, 140, 176, 216],
+  levelThresholds: [0, 15, 38, 68, 105, 150, 200, 260, 330, 410],
   maxLevel: 10,
   assistLv4Slot: 6, // アシスト4枠目はLv6以上
   wonderSkillLevel: 5,
@@ -107,10 +107,10 @@ export const XP = {
 export const SOUL = {
   max: 100,
   tickSec: 6.5,
-  tickGain: 5,
+  tickGain: 3.5,
   diffStep: 25, // 25%刻み
   trailerBonusPerStep: 0.6,
-  eventBase: { baseLost: 9, heroLost: 4 },
+  eventBase: { baseLost: 8, heroLost: 4 },
   leaderEventMult: 0.5,
   giantAliveMult: 0.2,
   announceAt: 50,

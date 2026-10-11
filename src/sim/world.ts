@@ -69,6 +69,8 @@ export class World {
   orbs: XpOrb[] = [];
   giants: Giant[] = [];
   soul = new SoulSystem();
+  /** AI など、毎ティック sim の前に動くもの */
+  controllers: { update(dt: number): void }[] = [];
   /** 巨人召喚時の一時停止（秒） */
   freezeT = 0;
   progress: [TeamProgress, TeamProgress] = [new TeamProgress(), new TeamProgress()];
@@ -311,6 +313,7 @@ export class World {
       if (m.slowT > 0) m.slowT -= dt;
     }
     updateSquads(this, dt);
+    for (const c of this.controllers) c.update(dt);
     for (const h of this.heroes) h.update(dt);
     updateGiants(this, dt);
     this.soul.update(this, dt);

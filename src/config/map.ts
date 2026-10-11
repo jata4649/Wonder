@@ -78,11 +78,9 @@ export interface WallDef extends Rect {
 
 const EDGE = 34; // 森の縁の壁の厚み
 /** 常に開いている森の入り口（中央付近）。 */
-const OPEN_GAPS: readonly [number, number][] = [
-  [1700, 1900],
-];
+export const OPEN_GAPS: readonly [number, number][] = [[1700, 1900]];
 /** 拠点破壊で開く入り口：各チームの手前拠点の横。 */
-const DOOR_GAP_HALF = 80;
+export const DOOR_GAP_HALF = 80;
 
 export function buildWalls(): WallDef[] {
   const walls: WallDef[] = [];
@@ -124,7 +122,6 @@ export function buildWalls(): WallDef[] {
     const cx = (s.x0 + s.x1) / 2;
     walls.push({ x: cx - 45, y: 1450, w: 90, h: 110, kind: 'rock' });
     walls.push({ x: cx - 45, y: 2040, w: 90, h: 110, kind: 'rock' });
-    walls.push({ x: cx - 100 + (stripIdx === 0 ? -20 : 20), y: 1780, w: 60, h: 40, kind: 'rock' });
   });
   return walls;
 }

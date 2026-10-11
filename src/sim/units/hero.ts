@@ -239,7 +239,8 @@ export class Hero implements Mob, DSOwner {
     for (const wall of w.activeWalls()) pushOutOfRect(this, this.r, wall);
     for (const g of w.closedGateRects(this.team)) pushOutOfRect(this, this.r, g);
     for (const b of w.bases) {
-      if (!b.alive) continue;
+      // 自軍の建物は通り抜けられる（敵の建物だけ遮る）
+      if (!b.alive || b.team === this.team) continue;
       const d = dist(this.x, this.y, b.x, b.y);
       const min = b.r + this.r;
       if (d < min && d > 0.01) {
