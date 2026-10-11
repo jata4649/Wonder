@@ -133,3 +133,9 @@ html.land .ping { width: 46px; }
 .card b { text-shadow: 0 1px 0 #fff8; }
 .card.ws { background-color: rgba(120,60,140,0.85); }
 .ricon { width: 18px; height: 18px; border-radius: 50%; vertical-align: middle; margin-right: 3px; }
+/* ---- カメラリセット（ミニマップの下・SPEC 1.2） ---- */
+.cam-reset { position: fixed; width: 44px; height: 44px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.5);
+  background: rgba(30,36,52,0.75); color: #cfd6e6; font-size: 24px; line-height: 1; padding: 0; touch-action: none; z-index: 6; }
+.cam-reset.on { border-color: #ffd23f; color: #ffd23f; box-shadow: 0 0 12px rgba(255,210,63,0.7); }
+.look-tag { position: fixed; left: 50%; transform: translateX(-50%); top: calc(clamp(34px, 9vh, 48px) + 38px + env(safe-area-inset-top));
+  display: none; padding: 3px 10px; border-radius: 10px; background: rgba(0,0,0,0.6); color: #ffd23f; font-size: 12px; font-weight: bold; pointer-events: none; }

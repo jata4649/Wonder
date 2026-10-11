@@ -45,19 +45,28 @@ export class Game {
     this.player = setupMatch(this.world, opts.loadout, opts.difficulty).player!;
     this.input = new InputManager(renderer.canvas, renderer.camera, () => this.player, () => this.world);
     this.controls = new Controls(uiRoot, this.input, () => this.player, (kind, x, y) => this.world.addPing(0, kind, x, y));
-    // ミニマップ：タップで拡大／戻す（拡大中は画面のどこをタップしても戻す）
+    // ミニマップのタップ：パン中ならカメラリセット（SPEC 1.2）、そうでなければ拡大／戻す。
+    // 拡大中は画面のどこをタップしても戻す。
     const mm = renderer.minimap;
+    const cam = renderer.camera;
     mm.expanded = false;
     this.input.uiHitTest = (sx, sy) => {
-      if (mm.expanded || mm.hit(sx, sy)) {
+      if (mm.expanded) {
         mm.toggle();
+        return true;
+      }
+      if (mm.hit(sx, sy)) {
+        if (cam.panned) cam.resetToHero();
+        else mm.toggle();
         return true;
       }
       return false;
     };
+    this.controls.onReset = () => cam.resetToHero();
+    this.controls.getCamera = () => cam;
+    this.controls.getMinimapRect = () => mm.rect;
     this.cards = new Cards(uiRoot, this.player, () => this.world);
-    renderer.camera.x = this.player.x;
-    renderer.camera.y = this.player.y;
+    renderer.camera.snap(this.player.x, this.player.y);
     renderer.invalidateBackground();
     this.raf = requestAnimationFrame(this.frame);
   }
@@ -85,7 +94,8 @@ export class Game {
     this.fx.push(w.drainEvents(), cam, this.player.id);
     this.fx.update(dt);
     if (w.wallsDirty) w.wallsDirty = false;
-    if (this.player.alive) cam.follow(this.player.x, this.player.y, dt, now / 1000);
+    // 自キャストの足元を注視（y はオフセット付き）。撤退中は最後の位置／復活後は城前
+    cam.follow(this.player.x, this.player.y, dt, now / 1000);
     cam.update(dt);
     this.fpsAcc += dt;
     this.fpsFrames++;

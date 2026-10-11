@@ -1,11 +1,14 @@
-import { CAMERA } from '../config/balance';
+import { CAM, CAMERA } from '../config/balance';
 import { PLAY_X0, PLAY_X1, WORLD_H, WORLD_W } from '../config/map';
 import { orient } from '../input/orientation';
 
 /**
- * カメラ。世界は回転しない（SPEC 1.1：縦長盤面のまま）。
- * - 横画面：フィールドの幅＝画面の幅になる倍率。x は中央に固定し、y 方向（上下）だけ追従・パンする。
- * - 縦画面：従来どおり自キャストを中心に追従（x・y とも）。
+ * 縦送りカメラ（SPEC 1.1 / 1.5）。世界は回転しない。
+ *   cam.x = 横画面：フィールド中央に固定（フィールド幅＝画面幅）／縦画面：自キャストの x
+ *   cam.y = 自キャストの足元 y + offsetY   ← 動かせるのは y だけ
+ * - スワイプで offsetY を動かす（横成分は捨てる）。上スワイプ＝奥（敵陣）を見る。
+ * - offsetY は「画面高×panClamp」「自キャストが画面端から minOnScreen 内側に残る範囲」「ワールド端」でクランプ。
+ * - 指を離してもオフセットは保持（autoReturnMs=0）。リセットで resetMs かけて 0 に戻す。
  */
 export class Camera {
   x = WORLD_W / 2; // 画面中央が指す世界座標
@@ -16,8 +19,13 @@ export class Camera {
   shake = 0;
   private shakeX = 0;
   private shakeY = 0;
-  /** 手動パンの終了時刻（秒） */
-  manualUntil = 0;
+  /** 自キャスト足元からのオフセット（y のみ・世界px）。 */
+  offsetY = 0;
+  /** 注視点（自キャストの足元） */
+  private focusX = WORLD_W / 2;
+  private focusY = WORLD_H - 600;
+  private reset?: { from: number; t: number };
+  private lastPanAt = 0;
 
   get land() {
     return orient.land;
@@ -33,32 +41,103 @@ export class Camera {
     if (this.land) {
       // 3レーンとも常に見える：フィールド幅＝画面幅
       this.scale = w / Camera.FIELD_W;
-      this.x = Camera.FIELD_CX;
     } else {
       this.scale = Math.min(w, h) / CAMERA.viewWorldMin;
       if (h > w) this.scale = Math.max(this.scale, h / 1900);
     }
+    this.offsetY = this.clampOffset(this.offsetY);
   }
 
-  follow(tx: number, ty: number, dt: number, now: number) {
-    if (now < this.manualUntil) return;
-    const k = 1 - Math.exp(-CAMERA.followLerp * dt);
-    if (this.land) this.x = Camera.FIELD_CX;
-    else this.x += (tx - this.x) * k;
-    this.y += (this.followY(ty) - this.y) * k;
+  /** 注視点を即座に合わせる（試合開始時など）。 */
+  snap(fx: number, fy: number) {
+    this.focusX = fx;
+    this.focusY = fy;
+    this.offsetY = 0;
+    this.reset = undefined;
+    this.x = this.targetX();
+    this.y = this.targetY();
   }
 
-  /** 横画面では自キャストをやや下寄りに置き、進行方向（上）を広く見せる。 */
-  private followY(ty: number) {
-    if (!this.land) return ty;
-    return ty - (this.viewH / this.scale) * CAMERA.landLookAhead;
+  private targetX() {
+    return this.land ? Camera.FIELD_CX : this.focusX;
+  }
+  private targetY() {
+    return this.focusY + this.offsetY;
   }
 
-  /** 画面上のドラッグ量でパン（指の動きどおりに盤面が動く）。横画面は縦送りのみ。 */
-  pan(dxScreen: number, dyScreen: number, now: number) {
-    if (!this.land) this.x = Math.max(0, Math.min(WORLD_W, this.x - dxScreen / this.scale));
-    this.y = Math.max(0, Math.min(WORLD_H, this.y - dyScreen / this.scale));
-    this.manualUntil = now + CAMERA.manualReturnSec;
+  /** オフセットの許容範囲（世界px）。 */
+  maxOffset() {
+    const byClamp = (this.viewH * CAM.panClamp) / this.scale;
+    const bySelf = (this.viewH * (0.5 - CAM.minOnScreen)) / this.scale; // 自キャストを画面内に残す
+    return Math.max(0, Math.min(byClamp, bySelf));
+  }
+
+  private clampOffset(off: number) {
+    const m = this.maxOffset();
+    off = Math.max(-m, Math.min(m, off));
+    // ワールド端も超えない（注視点 + オフセットがワールド内）
+    off = Math.max(-this.focusY, Math.min(WORLD_H - this.focusY, off));
+    return off;
+  }
+
+  /** 毎フレーム：自キャストの足元へ追従（y はオフセット付き）。 */
+  follow(fx: number, fy: number, dt: number, nowSec = performance.now() / 1000) {
+    this.focusX = fx;
+    this.focusY = fy;
+    if (this.reset) {
+      this.reset.t += dt * 1000;
+      const k = Math.min(1, this.reset.t / CAM.resetMs);
+      const e = 1 - (1 - k) * (1 - k); // easeOutQuad
+      this.offsetY = this.reset.from * (1 - e);
+      if (k >= 1) {
+        this.offsetY = 0;
+        this.reset = undefined;
+      }
+      // リセット中は即座に足元へ
+      this.x = this.targetX();
+      this.y = this.targetY();
+      return;
+    }
+    if (CAM.autoReturnMs > 0 && this.offsetY !== 0 && nowSec * 1000 - this.lastPanAt > CAM.autoReturnMs) this.resetToHero();
+    this.offsetY = this.clampOffset(this.offsetY);
+    const k = 1 - Math.pow(1 - CAM.followLerp, dt * 60);
+    this.x += (this.targetX() - this.x) * k;
+    this.y += (this.targetY() - this.y) * k;
+    // どれだけ遅れても自キャストは画面内に残す
+    const lim = (this.viewH * (0.5 - CAM.minOnScreen)) / this.scale;
+    if (fy - this.y > lim) this.y = fy - lim;
+    if (this.y - fy > lim) this.y = fy + lim;
+    if (!this.land) {
+      const limX = (this.viewW * (0.5 - CAM.minOnScreen)) / this.scale;
+      if (fx - this.x > limX) this.x = fx - limX;
+      if (this.x - fx > limX) this.x = fx + limX;
+    }
+  }
+
+  /**
+   * スワイプでパン。横成分は完全に捨て、y オフセットだけ動かす。
+   * 上スワイプ＝奥（敵陣）を見る／下スワイプ＝手前（自陣）を見る（SPEC 1.5(a)）。
+   */
+  pan(_dxScreen: number, dyScreen: number, nowSec = performance.now() / 1000) {
+    if (this.reset) this.reset = undefined;
+    this.offsetY = this.clampOffset(this.offsetY + dyScreen / this.scale);
+    this.y = this.targetY(); // パンは即時に反映
+    this.lastPanAt = nowSec * 1000;
+  }
+
+  /** カメラリセット：自キャストの足元を画面中央へ（resetMs でイージング）。 */
+  resetToHero() {
+    if (this.offsetY === 0 && !this.reset) {
+      this.y = this.targetY();
+      this.x = this.targetX();
+      return;
+    }
+    this.reset = { from: this.offsetY, t: 0 };
+  }
+
+  /** オフセットを保持しているか（リセットボタンの点灯用）。 */
+  get panned() {
+    return Math.abs(this.offsetY) > 1 && !this.reset;
   }
 
   /** 画面上の方向 → ワールドの方向（回転しないので同じ）。 */

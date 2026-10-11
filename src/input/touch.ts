@@ -13,7 +13,7 @@ export class InputManager {
   stick = new VirtualStick();
   gesture: DrawGesture;
   private roles = new Map<number, Role>();
-  private panPts = new Map<number, { x: number; y: number }>();
+  private panPts = new Map<number, { x: number; y: number; x0: number; y0: number; t0: number }>();
   private keys = new Set<string>();
   /** UI（ミニマップなど）がタップを横取りする */
   uiHitTest: (sx: number, sy: number) => boolean = () => false;
@@ -43,6 +43,14 @@ export class InputManager {
     return performance.now();
   }
 
+  /**
+   * ジェスチャ優先順位（SPEC 1.5(b)）
+   *  1. ドロー描画：右ゾーンで、自キャストのドロー射程内に触れた指（描き始めたら以後は描画に専念）
+   *  2. 移動スティック：左ゾーン
+   *  3. UI：ボタン類は DOM 側、ミニマップは uiHitTest
+   *  4. カメラパン：2本目以降の指（既存の描画・スティックは奪わない）、
+   *     または右ゾーンでもフィールド背景（射程外）の1本指スワイプ
+   */
   private onDown = (e: PointerEvent) => {
     if (!this.enabled) return;
     e.preventDefault();
@@ -51,32 +59,31 @@ export class InputManager {
       this.roles.set(id, 'ui');
       return;
     }
-    // 操作ゾーン：左46%=移動スティック／右54%=ドロー描画（SPEC 1.2）
     const left = x < this.camera.viewW * STICK_ZONE;
-    const sameSideBusy = left ? this.stick.active : this.gesture.active;
-    if (sameSideBusy || this.panPts.size > 0) {
-      // 2本指 → カメラ
-      if (this.stick.active && left) {
-        this.panPts.set(this.stick.pointerId, { x: this.stick.x, y: this.stick.y });
-        this.roles.set(this.stick.pointerId, 'pan');
-        this.stick.end();
-      }
-      if (this.gesture.active && !left) {
-        this.panPts.set(this.gesture.pointerId, { x, y });
-        this.roles.set(this.gesture.pointerId, 'pan');
-        this.gesture.cancel();
-      }
-      this.panPts.set(id, { x, y });
-      this.roles.set(id, 'pan');
-      return;
-    }
-    if (left) {
+    if (left && !this.stick.active) {
       this.stick.begin(id, x, y);
       this.roles.set(id, 'stick');
-    } else if (this.gesture.begin(id, x, y, this.now())) {
-      this.roles.set(id, 'draw');
+      return;
     }
+    if (!left && !this.gesture.active && this.panPts.size === 0 && this.inDrawZone(x, y)) {
+      if (this.gesture.begin(id, x, y, this.now())) {
+        this.roles.set(id, 'draw');
+        return;
+      }
+    }
+    // それ以外はカメラパン（描画中・スティック操作中の指は奪わない）
+    this.panPts.set(id, { x, y, x0: x, y0: y, t0: this.now() });
+    this.roles.set(id, 'pan');
   };
+
+  /** ドローを始められる位置か：自キャストのドロー射程（＋余裕）の内側。外側はフィールド背景＝パン。 */
+  private inDrawZone(sx: number, sy: number) {
+    const h = this.getHero();
+    if (!h || !h.alive) return false;
+    const w = this.camera.screenToWorld(sx, sy);
+    const r = h.stat('drawRange') + 40;
+    return (w.x - h.x) ** 2 + (w.y - h.y) ** 2 <= r * r;
+  }
 
   private onMove = (e: PointerEvent) => {
     const role = this.roles.get(e.pointerId);
@@ -100,7 +107,15 @@ export class InputManager {
     this.roles.delete(e.pointerId);
     if (role === 'stick') this.stick.end();
     else if (role === 'draw') this.gesture.end(e.clientX, e.clientY, this.now());
-    else if (role === 'pan') this.panPts.delete(e.pointerId);
+    else if (role === 'pan') {
+      const p = this.panPts.get(e.pointerId);
+      this.panPts.delete(e.pointerId);
+      // 射程外を1本指で「タップ」しただけなら、従来どおりオート照準のストレートショット
+      if (p && this.panPts.size === 0 && !this.gesture.active && Math.hypot(e.clientX - p.x0, e.clientY - p.y0) < 14 && this.now() - p.t0 < 320 && e.clientX >= this.camera.viewW * STICK_ZONE) {
+        this.gesture.tapAt(e.clientX, e.clientY);
+      }
+    }
+    // 指を離してもオフセットは保持（自動では戻らない）
   };
 
   private onCancel = (e: PointerEvent) => {

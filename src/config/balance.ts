@@ -141,7 +141,13 @@ export const CROSS = {
 export const CAMERA = {
   viewWorldMin: 900, // 縦画面：画面短辺に映る世界の幅
   landSideMargin: 20, // 横画面：フィールド幅＝画面幅にするときの左右の余白（世界px）
-  landLookAhead: 0.12, // 横画面：自キャストを画面中央よりこの割合だけ下に置く
-  manualReturnSec: 3,
-  followLerp: 8,
+};
+
+/** 縦送りカメラ（SPEC 1.5）。カメラ位置 = 自キャストの足元 + オフセット(yのみ)。 */
+export const CAM = {
+  followLerp: 0.14, // 追従の滑らかさ（60fps 1フレームあたり。1に近いほど即追従）
+  panClamp: 0.34, // オフセットの上限＝画面高の何割まで見られるか（上下それぞれ）
+  minOnScreen: 0.15, // 自キャストが画面端から最低これだけ内側に残るよう追加でクランプ
+  resetMs: 150, // リセットの戻りイージング
+  autoReturnMs: 0, // 0＝自動復帰しない（リセットボタンで戻す）。>0 で放置復帰
 };

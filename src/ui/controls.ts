@@ -1,6 +1,7 @@
 // 右下の操作UI（回避ボタン・カード）。キャンバスとは別レイヤ（pointer-events 有り）。
 import type { InputManager } from '../input/touch';
 import type { Hero } from '../sim/units/hero';
+import type { Camera } from '../render/camera';
 import type { PingKind } from '../sim/world';
 import { ASSETS } from '../config/assets';
 import { assetUrl } from '../render/assets';
@@ -11,6 +12,11 @@ export class Controls {
   root: HTMLDivElement;
   private evadeBtn: HTMLButtonElement;
   private evadeCd: HTMLDivElement;
+  private resetBtn: HTMLButtonElement;
+  private lookTag: HTMLDivElement;
+  onReset?: () => void;
+  getCamera?: () => Camera;
+  getMinimapRect?: () => { x: number; y: number; w: number; h: number };
 
   constructor(
     parent: HTMLElement,
@@ -54,10 +60,34 @@ export class Controls {
       pings.appendChild(b);
     }
     this.root.appendChild(pings);
+    // カメラリセット（ミニマップの下）
+    this.resetBtn = document.createElement('button');
+    this.resetBtn.className = 'cam-reset interactive';
+    this.resetBtn.title = 'カメラを自キャストへ戻す';
+    this.resetBtn.innerHTML = '<span>⌖</span>';
+    this.resetBtn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.onReset?.();
+    });
+    this.root.appendChild(this.resetBtn);
+    this.lookTag = document.createElement('div');
+    this.lookTag.className = 'look-tag';
+    this.root.appendChild(this.lookTag);
     parent.appendChild(this.root);
   }
 
   update() {
+    const r = this.getMinimapRect?.();
+    if (r) {
+      this.resetBtn.style.top = `${r.y + r.h + 6}px`;
+      this.resetBtn.style.left = `${r.x + r.w / 2 - 22}px`;
+    }
+    const cam = this.getCamera?.();
+    const panned = !!cam?.panned;
+    this.resetBtn.classList.toggle('on', panned);
+    this.lookTag.style.display = panned ? 'block' : 'none';
+    if (cam && panned) this.lookTag.textContent = cam.offsetY < 0 ? '▲ 奥（敵陣）を見ています' : '▼ 手前（自陣）を見ています';
     const h = this.getHero();
     if (!h) return;
     const frac = h.evadeCd > 0 ? h.evadeCd / 1.4 : 0;

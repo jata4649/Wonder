@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { CASTERS, CASTER_BY_ID } from '../src/config/casters';
 import { CASTLE_POS, LANE_X, PLAY_X0, PLAY_X1 } from '../src/config/map';
-import { MINION } from '../src/config/balance';
+import { CAM, MINION } from '../src/config/balance';
 import { orient } from '../src/input/orientation';
 import { DrawGesture } from '../src/input/drawGesture';
 import { Camera } from '../src/render/camera';
@@ -44,13 +44,12 @@ describe('M0 横画面（縦長盤面のまま・回転しない）', () => {
 
   it('フィールド幅＝画面幅：3レーンとも常に画面内（黒帯なし）', () => {
     const c = landCam();
+    c.snap(LANE_X[0], 2000); // 端レーンにいても
     const left = c.worldToScreen(PLAY_X0, 1800).x;
     const right = c.worldToScreen(PLAY_X1, 1800).x;
     expect(left).toBeGreaterThanOrEqual(0);
     expect(right).toBeLessThanOrEqual(844);
     expect(right - left).toBeGreaterThan(844 * 0.95);
-    // 自キャストが端レーンにいても x は動かない
-    c.follow(LANE_X[0], 2000, 1, 0);
     expect(c.x).toBe(Camera.FIELD_CX);
   });
 
@@ -70,20 +69,90 @@ describe('M0 横画面（縦長盤面のまま・回転しない）', () => {
 
   it('スティックを上に倒すと画面の上（敵陣方向）へ移動する', () => {
     const c = landCam();
-    const d = c.screenDirToWorld(0, -1);
-    expect(d).toEqual({ x: 0, y: -1 });
+    expect(c.screenDirToWorld(0, -1)).toEqual({ x: 0, y: -1 });
     expect(c.up).toEqual({ x: 0, y: -1 });
   });
+});
 
-  it('2本指パンは縦送り（ドラッグ方向どおり）', () => {
+describe('SPEC 1.5 縦送りカメラ', () => {
+  const hero = { x: 1200, y: 2400 };
+  const cam = () => {
     const c = landCam();
-    const p0 = c.worldToScreen(1300, 1900);
-    c.pan(40, -25, 0);
-    const p1 = c.worldToScreen(1300, 1900);
-    expect(p1.x - p0.x).toBeCloseTo(0, 6); // 横には動かない
-    expect(p1.y - p0.y).toBeCloseTo(-25, 6);
+    c.snap(hero.x, hero.y);
+    return c;
+  };
+  const heroScreen = (c: Camera) => c.worldToScreen(hero.x, hero.y);
+
+  it('普段は自キャストの足元を画面中央に注視', () => {
+    const c = cam();
+    const p = heroScreen(c);
+    expect(p.y).toBeCloseTo(195, 3);
   });
 
+  it('上スワイプ＝奥（敵陣）を見る／下スワイプ＝手前（自陣）', () => {
+    const c = cam();
+    c.pan(0, -60, 0);
+    expect(c.offsetY).toBeLessThan(0);
+    expect(c.y).toBeLessThan(hero.y);
+    c.pan(0, 120, 0);
+    expect(c.offsetY).toBeGreaterThan(0);
+  });
+
+  it('斜めにスワイプしても横には一切動かない', () => {
+    const c = cam();
+    const x0 = c.x;
+    c.pan(200, -40, 0);
+    c.pan(-300, 10, 0);
+    expect(c.x).toBe(x0);
+  });
+
+  it('どれだけパンしても自キャストが画面内に残る（クランプ）', () => {
+    const c = cam();
+    for (let i = 0; i < 50; i++) c.pan(0, -100, 0);
+    let p = heroScreen(c);
+    expect(p.y).toBeLessThanOrEqual(390 * (1 - CAM.minOnScreen) + 0.01);
+    expect(Math.abs(c.offsetY)).toBeLessThanOrEqual((390 * CAM.panClamp) / c.scale + 0.01);
+    for (let i = 0; i < 50; i++) c.pan(0, 100, 0);
+    p = heroScreen(c);
+    expect(p.y).toBeGreaterThanOrEqual(390 * CAM.minOnScreen - 0.01);
+  });
+
+  it('指を離しても勝手に戻らない／移動すればそのまま追従', () => {
+    const c = cam();
+    c.pan(0, -80, 0);
+    const off = c.offsetY;
+    for (let i = 0; i < 300; i++) c.follow(hero.x, hero.y, 1 / 60, i / 60);
+    expect(c.offsetY).toBeCloseTo(off, 6);
+    // 自キャストが上へ300動く → カメラもオフセットを保ったまま付いてくる
+    for (let i = 0; i < 300; i++) c.follow(hero.x, hero.y - 300, 1 / 60, 5 + i / 60);
+    expect(c.y).toBeCloseTo(hero.y - 300 + off, 0);
+  });
+
+  it('カメラリセットで自キャストの足元が画面中央に戻る', () => {
+    const c = cam();
+    c.pan(0, -100, 0);
+    expect(c.panned).toBe(true);
+    c.resetToHero();
+    for (let i = 0; i < 12; i++) c.follow(hero.x, hero.y, 1 / 60); // 200ms
+    expect(c.offsetY).toBe(0);
+    expect(c.panned).toBe(false);
+    expect(heroScreen(c).y).toBeCloseTo(195, 3);
+  });
+
+  it('縦画面でも同じ（y のみ・クランプ）', () => {
+    orient.land = false;
+    const c = new Camera();
+    c.resize(390, 844);
+    c.snap(hero.x, hero.y);
+    const x0 = c.x;
+    for (let i = 0; i < 30; i++) c.pan(120, -100, 0);
+    expect(c.x).toBe(x0);
+    const p = heroScreen(c);
+    expect(p.y).toBeLessThanOrEqual(844 * (1 - CAM.minOnScreen) + 0.01);
+  });
+});
+
+describe('正立テキスト', () => {
   it('正立キュー：文字とバーはスクリーン空間で描かれる', () => {
     const c = landCam();
     const q = new UprightQueue();

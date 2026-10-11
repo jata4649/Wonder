@@ -120,6 +120,12 @@ export class DrawGesture {
     this.fire('fire');
   }
 
+  /** 描画ジェスチャ外でのタップ（射程外のフィールドなど）。 */
+  tapAt(sx: number, sy: number) {
+    const h = this.getHero();
+    if (h?.alive) this.tapShot(h, sx, sy);
+  }
+
   private tapShot(h: Hero, sx: number, sy: number) {
     const w = this.world();
     const target = w.nearestEnemy(h.x, h.y, h.team, h.def.straightRange + 60, (m) => m.kind === 'hero') ??
