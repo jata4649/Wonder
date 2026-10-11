@@ -93,6 +93,21 @@ export function slotOffset(i: number, fwd: number) {
   return { x: col * MINION.spacing * 1.25, y: -fwd * row * MINION.spacing };
 }
 
+/** 総数の上限を超えたら古い個体（id が小さい＝先に出た）から間引く。経験値は出さない。 */
+export function cullMinions(world: World) {
+  const over = world.minions.length - MINION.maxTotal;
+  if (over <= 0) return;
+  const oldest = world.minions
+    .filter((m) => m.alive && !m.ramming)
+    .sort((a, b) => a.id - b.id)
+    .slice(0, over);
+  for (const m of oldest) {
+    m.alive = false;
+    m.hp = 0;
+  }
+  world.minions = world.minions.filter((m) => m.alive);
+}
+
 /** 生成タイマー（城・手前拠点・奥拠点）。 */
 export function updateSpawns(world: World, dt: number) {
   const W = MINION;
@@ -129,6 +144,7 @@ export function updateSpawns(world: World, dt: number) {
       }
     }
   }
+  cullMinions(world);
 }
 
 /** 敵として認識できるか。 */

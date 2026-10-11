@@ -49,6 +49,7 @@ export const MINION = {
   deepWave: { countOnOpen: 6, count: 5, intervalSec: 40 },
   downSec: 1.0,
   downChaseMult: 0.5, // ダウン追撃時の威力倍率
+  maxTotal: 150, // 画面負荷対策：総数の上限（超えたら古い個体から間引く）
 };
 
 /** ロール別のドロー減衰（軌道弾）。ファイター≈最終6割、それ以外≈4〜5割。 */

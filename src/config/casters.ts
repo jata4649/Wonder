@@ -35,7 +35,7 @@ function draw(role: Role, d: Partial<DrawShotDef> & Pick<DrawShotDef, 'type' | '
     maxHits: 0,
     down: true,
     multiShot: 1,
-    soloCross: false,
+    crossSolo: false,
     coreMult: 1,
     ...d,
   };
@@ -53,7 +53,8 @@ export const CASTERS: CasterDef[] = [
     moveSpeed: 232,
     straightRange: 330,
     straight: { power: 26, speed: 1150, pierce: false, trait: 'sweep', traitPower: 14, minionMult: 1.2, heroMult: 0.9 },
-    draw: draw('fighter', { type: 'curve', range: 380, drawLength: 420, baseSpeed: 420, speedUpStraight: 1.15, speedDownSharp: 0.55, width: 32, power: 72 }),
+    draw: draw('fighter', { type: 'curve', range: 380, drawLength: 420, baseSpeed: 430, speedUpStraight: 1.15, speedDownSharp: 0.55, width: 46, power: 62 }),
+    dsNote: '平均的な軌道弾。判定が広く減衰しにくい。',
     skills: [
       sk('ak_spin', '回転斬り', '旋', 'attack', 18, 7, 1, 'nova', { radius: 150, power: 60, down: 1 }, '周囲をなぎ払う'),
       sk('ak_dash', '踏み込み', '駆', 'mobility', 10, 6, 1, 'dash', { distance: 260 }, '前方へ素早く移動'),
@@ -77,7 +78,8 @@ export const CASTERS: CasterDef[] = [
     moveSpeed: 225,
     straightRange: 340,
     straight: { power: 28, speed: 1100, pierce: false, trait: 'blast', traitPower: 16, minionMult: 1.3, heroMult: 0.7 },
-    draw: draw('fighter', { type: 'curve', range: 520, drawLength: 380, baseSpeed: 460, speedUpStraight: 1.35, speedDownSharp: 0.35, width: 34, power: 68 }),
+    draw: draw('fighter', { type: 'curve', range: 520, drawLength: 400, baseSpeed: 400, speedUpStraight: 1.42, speedDownSharp: 0.26, width: 54, power: 74 }),
+    dsNote: '最長クラスの射程。鋭角でほぼ停止する（停滞ドロー）。',
     skills: [
       sk('tk_anchor', '錨投げ', '錨', 'attack', 16, 7, 1, 'bolt', { power: 80, speed: 900, range: 520, width: 36, down: 1 }, '貫通する錨を投げる'),
       sk('tk_hook', '鉤縄', '鉤', 'mobility', 12, 8, 1, 'blink', { range: 300 }, '狙った場所へ移動'),
@@ -101,7 +103,8 @@ export const CASTERS: CasterDef[] = [
     moveSpeed: 228,
     straightRange: 310,
     straight: { power: 24, speed: 1050, pierce: false, trait: 'sweep', traitPower: 12, minionMult: 1.2, heroMult: 0.9 },
-    draw: draw('fighter', { type: 'curve', range: 340, drawLength: 620, baseSpeed: 360, speedUpStraight: 1.1, speedDownSharp: 0.6, width: 30, power: 64, soloCross: true }),
+    draw: draw('fighter', { type: 'curve', range: 340, drawLength: 660, baseSpeed: 370, speedUpStraight: 1.12, speedDownSharp: 0.6, width: 42, power: 58, crossSolo: true }),
+    dsNote: '描ける線の長さが最長。一列薙いで折り返せる。自分の軌跡でもクロス可。',
     skills: [
       sk('nh_thorn', '茨の輪', '茨', 'attack', 18, 8, 1, 'nova', { radius: 170, power: 55, down: 1 }, '周囲に茨を広げる'),
       sk('nh_sleep', '眠りの霧', '眠', 'debuff', 20, 12, 1, 'slow', { radius: 220, mult: 0.5, dur: 3, power: 20 }, '周囲の敵を鈍足化'),
@@ -125,7 +128,8 @@ export const CASTERS: CasterDef[] = [
     moveSpeed: 248,
     straightRange: 300,
     straight: { power: 30, speed: 1300, pierce: false, trait: 'triple', traitPower: 12, minionMult: 0.9, heroMult: 1.2 },
-    draw: draw('attacker', { type: 'curve', range: 300, drawLength: 380, baseSpeed: 700, speedUpStraight: 1.2, speedDownSharp: 0.5, width: 26, power: 66, down: false }),
+    draw: draw('attacker', { type: 'curve', range: 300, drawLength: 380, baseSpeed: 640, speedUpStraight: 1.2, speedDownSharp: 0.5, width: 34, power: 66, down: false }),
+    dsNote: '転ばせず連射できるので兵士処理が速い（非ダウン）。',
     skills: [
       sk('ku_clock', '早回し時計', '時', 'buff', 15, 12, 1, 'haste', { mult: 1.4, dur: 4 }, '移動速度アップ'),
       sk('ku_hole', '穴落ち', '穴', 'mobility', 12, 7, 1, 'dash', { distance: 300 }, '素早く移動'),
@@ -149,7 +153,8 @@ export const CASTERS: CasterDef[] = [
     moveSpeed: 232,
     straightRange: 300,
     straight: { power: 22, speed: 1000, pierce: false, minionMult: 1, heroMult: 1 },
-    draw: draw('support', { type: 'lob', range: 460, width: 0, power: 78, lobRadius: 115, lobTime: 0.85, coreMult: 2.6 }),
+    draw: draw('support', { type: 'lob', range: 470, width: 0, power: 78, lobRadius: 135, lobTime: 0.85, coreMult: 2.6, piercePower: 99 }),
+    dsNote: '着弾点を指定。拠点破壊が得意。着弾点は相手にも見える。',
     skills: [
       sk('gr_heal', '舞踏会の灯', '灯', 'heal', 22, 12, 1, 'heal', { amount: 0.22, radius: 300 }, '周囲の味方を回復'),
       sk('gr_pumpkin', 'かぼちゃ馬車', '車', 'buff', 18, 14, 1, 'haste', { mult: 1.35, dur: 5, radius: 300 }, '周囲の味方を加速'),
@@ -173,7 +178,8 @@ export const CASTERS: CasterDef[] = [
     moveSpeed: 250,
     straightRange: 300,
     straight: { power: 30, speed: 1250, pierce: false, minionMult: 0.9, heroMult: 1.2 },
-    draw: draw('attacker', { type: 'leap', range: 360, power: 92, aoeRadius: 130, coreMult: 1.2 }),
+    draw: draw('attacker', { type: 'leap', range: 380, power: 82, aoeRadius: 145, coreMult: 1.2, piercePower: 99 }),
+    dsNote: '森を飛び越えて着地範囲攻撃。',
     skills: [
       sk('hs_feather', '羽根手裏剣', '羽', 'attack', 15, 6, 1, 'bolt', { power: 85, speed: 1300, range: 440, width: 24, down: 0 }, '貫通する羽根'),
       sk('hs_wind', '追い風', '風', 'buff', 14, 11, 1, 'haste', { mult: 1.45, dur: 4 }, '移動速度アップ'),
@@ -197,7 +203,8 @@ export const CASTERS: CasterDef[] = [
     moveSpeed: 226,
     straightRange: 300,
     straight: { power: 26, speed: 1100, pierce: false, trait: 'sweep', traitPower: 14, minionMult: 1.2, heroMult: 0.9 },
-    draw: draw('fighter', { type: 'charge', range: 300, power: 46, aoeRadius: 62 }),
+    draw: draw('fighter', { type: 'charge', range: 300, power: 98, aoeRadius: 62, piercePower: 99, chargeHits: 2 }),
+    dsNote: '直線突進で2回判定。射程は短く火力は最高。',
     skills: [
       sk('on_curse', '呪詛', '呪', 'debuff', 18, 10, 1, 'slow', { radius: 220, mult: 0.5, dur: 3, power: 30 }, '敵を鈍足化'),
       sk('on_iron', '鬼の金棒', '棒', 'attack', 18, 7, 1, 'nova', { radius: 160, power: 70, down: 1 }, '周囲をなぎ払う'),
@@ -221,7 +228,8 @@ export const CASTERS: CasterDef[] = [
     moveSpeed: 234,
     straightRange: 300,
     straight: { power: 22, speed: 1050, pierce: false, trait: 'triple', traitPower: 10, minionMult: 1, heroMult: 1 },
-    draw: draw('support', { type: 'curve', range: 300, drawLength: 400, baseSpeed: 500, speedUpStraight: 1.05, speedDownSharp: 0.7, width: 22, power: 60, multiShot: 3 }),
+    draw: draw('support', { type: 'curve', range: 320, drawLength: 420, baseSpeed: 520, speedUpStraight: 1.06, speedDownSharp: 0.7, width: 24, power: 40, multiShot: 3 }),
+    dsNote: '3発同時。1回でチェインが伸び、経験値効率が高い。',
     skills: [
       sk('sc_song', '七つの歌', '歌', 'heal', 22, 12, 1, 'heal', { amount: 0.2, radius: 300 }, '周囲の味方を回復'),
       sk('sc_mine', '鉱山の灯', '鉱', 'heal', 15, 14, 1, 'mpBurst', { amount: 30, radius: 300 }, '味方のMP回復'),

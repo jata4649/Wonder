@@ -54,7 +54,7 @@ describe('クロスドロー', () => {
 
   it('単独クロス持ちは自分の前回軌跡でもクロス可', () => {
     const { w, a } = setup('nemurihime');
-    expect(a.def.draw.soloCross).toBe(true);
+    expect(a.def.draw.crossSolo).toBe(true);
     a.cmds.push({ t: 'ds', pts: line(1150, 1960, 1450, 1850) });
     w.step(1 / 60);
     a.mp = 100;

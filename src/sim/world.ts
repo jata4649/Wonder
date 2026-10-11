@@ -210,7 +210,7 @@ export class World {
 
   // ---- クロスドロー ----
   checkCross(h: Hero, pts: { x: number; y: number }[]): CrossResult {
-    const tr = findCross(this.trails, h.team, h.id, h.def.draw.soloCross, h.lastTrailId, pts);
+    const tr = findCross(this.trails, h.team, h.id, h.def.draw.crossSolo, h.lastTrailId, pts);
     if (!tr) return { crossed: false, sizeMult: 1, powerAdd: 0, speedMult: 1 };
     this.emit({ type: 'cross', hero: h, x: pts[0].x, y: pts[0].y, solo: tr.ownerId === h.id });
     return { crossed: true, sizeMult: CROSS.sizeMult, powerAdd: CROSS.powerAdd, speedMult: CROSS.speedMult };

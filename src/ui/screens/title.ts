@@ -59,7 +59,7 @@ export function showTitle(root: HTMLElement, onStart: (r: TitleResult) => void) 
           ).join('')}
         </div>
         <div class="desc">
-          <b>${c.name}</b>（${ROLE_LABEL[c.role]} / ${TYPE_LABEL[d.type]}）<br/>${c.desc}
+          <b>${c.name}</b>（${ROLE_LABEL[c.role]} / ${TYPE_LABEL[d.type]}）<br/><b class="note">${c.dsNote}</b><br/>${c.desc}
           <div class="params">射程 ${d.range}${d.type === 'curve' ? ` / 描線長 ${d.drawLength} / 弾速 ${d.baseSpeed}（直線×${d.speedUpStraight}・鋭角×${d.speedDownSharp}）` : ''}${d.multiShot > 1 ? ` / ${d.multiShot}発` : ''}${d.down ? '' : ' / 非ダウン'}</div>
         </div>
         <h2>スキル <small>${lo.skillIds.length}/3 装備</small></h2>

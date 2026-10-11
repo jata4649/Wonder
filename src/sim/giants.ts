@@ -104,6 +104,9 @@ function updateGiant(world: World, g: Giant, dt: number) {
         world.emit({ type: 'blast', x: g.x, y: g.y, r: 200, team: g.team });
       } else {
         damageBase(world, target, target.hp + 1, src(g));
+        // 破壊型は拠点に接触したら消滅（SPEC 6.2）
+        g.alive = false;
+        world.emit({ type: 'blast', x: g.x, y: g.y, r: 200, team: g.team });
       }
       return;
     }

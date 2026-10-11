@@ -11,6 +11,10 @@ import type { World } from '../sim/world';
 
 const TAP_MOVE_PX = 14;
 const TAP_MAX_MS = 320;
+/** 短くまっすぐ素早くフリックするとストレートショット（SPEC 4.1） */
+const FLICK_MAX_MS = 180;
+const FLICK_MAX_PX = 150;
+const FLICK_STRAIGHTNESS = 0.9;
 
 export class DrawGesture {
   active = false;
@@ -22,6 +26,9 @@ export class DrawGesture {
   noMp = false;
   pts: Vec[] = [];
   length = 0;
+  private screenLen = 0;
+  private lastSx = 0;
+  private lastSy = 0;
   /** 直近に発動/キャンセルした結果（演出用） */
   lastResult: { kind: 'fire' | 'cancel' | 'auto' | 'ss'; t: number } | null = null;
 
@@ -39,6 +46,9 @@ export class DrawGesture {
     this.startT = now;
     this.sx0 = sx;
     this.sy0 = sy;
+    this.lastSx = sx;
+    this.lastSy = sy;
+    this.screenLen = 0;
     this.moved = false;
     this.noMp = h.mp < h.drawCost;
     const w = this.camera.screenToWorld(sx, sy);
@@ -53,6 +63,9 @@ export class DrawGesture {
     if (!this.active) return;
     const h = this.getHero();
     if (!h || !h.alive) return this.cancel();
+    this.screenLen += Math.hypot(sx - this.lastSx, sy - this.lastSy);
+    this.lastSx = sx;
+    this.lastSy = sy;
     if (!this.moved && Math.hypot(sx - this.sx0, sy - this.sy0) > TAP_MOVE_PX) {
       this.moved = true;
       if (this.noMp) {
@@ -81,6 +94,20 @@ export class DrawGesture {
     if (!h) return this.reset();
     if (!this.moved && now - this.startT < TAP_MAX_MS) {
       this.tapShot(h, sx, sy);
+      return this.reset();
+    }
+    // 短く素早い直線のフリック → ストレートショット（MP不要）
+    const chord = Math.hypot(sx - this.sx0, sy - this.sy0);
+    if (
+      this.moved &&
+      now - this.startT < FLICK_MAX_MS &&
+      chord < FLICK_MAX_PX &&
+      chord / Math.max(1, this.screenLen) > FLICK_STRAIGHTNESS
+    ) {
+      const d = this.camera.screenDirToWorld(sx - this.sx0, sy - this.sy0);
+      const L = Math.hypot(d.x, d.y) || 1;
+      h.cmds.push({ t: 'ss', x: h.x + (d.x / L) * 300, y: h.y + (d.y / L) * 300 });
+      this.lastResult = { kind: 'ss', t: now };
       return this.reset();
     }
     if (this.noMp || this.pts.length < 2) return this.reset();

@@ -57,12 +57,12 @@ export function polylinesCross(a: Vec[], b: Vec[]): boolean {
 }
 
 /** 描いた軌跡が交差できる軌跡に交わるか。 */
-export function findCross(trails: Trail[], team: Team, ownerId: number, soloCross: boolean, lastOwnTrailId: number, path: Vec[]): Trail | undefined {
+export function findCross(trails: Trail[], team: Team, ownerId: number, crossSolo: boolean, lastOwnTrailId: number, path: Vec[]): Trail | undefined {
   const bb = bboxOf(path);
   for (const tr of trails) {
     if (tr.team !== team) continue;
     const own = tr.ownerId === ownerId;
-    if (own && !(soloCross && tr.id === lastOwnTrailId)) continue;
+    if (own && !(crossSolo && tr.id === lastOwnTrailId)) continue;
     if (tr.bbox.x1 < bb.x0 || tr.bbox.x0 > bb.x1 || tr.bbox.y1 < bb.y0 || tr.bbox.y0 > bb.y1) continue;
     if (polylinesCross(path, tr.pts)) return tr;
   }

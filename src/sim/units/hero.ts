@@ -324,7 +324,7 @@ export class Hero implements Mob, DSOwner {
         const cross = this.world.checkCross(this, path);
         const prof = buildProfile(path, d);
         const n = Math.max(1, d.multiShot);
-        const powerEach = d.power * this.stat('drawAtk') * (n > 1 ? 0.55 : 1) * (1 + cross.powerAdd);
+        const powerEach = d.power * this.stat('drawAtk') * (1 + cross.powerAdd); // 複数弾は1発ごとの威力
         for (let i = 0; i < n; i++) {
           const off = n === 1 ? 0 : (i - (n - 1) / 2) * 22;
           const p = off === 0 ? prof : buildProfile(offsetPath(prof.pts, off), d);
@@ -454,7 +454,7 @@ export class Hero implements Mob, DSOwner {
     if (c.left <= 0 || blocked) {
       // 2回目の判定：突進の終わりに周囲を薙ぐ（減衰なし）
       const R2 = R * 1.8;
-      this.world.grid.query(this.x, this.y, R2 + 120, (m) => {
+      if ((d.chargeHits ?? 2) >= 2) this.world.grid.query(this.x, this.y, R2 + 120, (m) => {
         if (m.team === this.team) return;
         const near = dist2(this.x, this.y, m.x, m.y) < (R2 + m.r) ** 2;
         const passed = c.hits.has(m.id) && dist2(this.x, this.y, m.x, m.y) < (R2 + 120) ** 2;

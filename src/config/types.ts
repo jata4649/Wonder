@@ -16,12 +16,13 @@ export interface DrawShotDef {
   width: number; // 弾サイズ/判定幅
   power: number; // 表記威力（1ヒット目）
   decay: number[]; // ヒット毎の係数（ロール既定＋個別上書き）
-  piercePower: number; // 貫通力（大兵士耐性1 / 巨人5）
+  piercePower: number; // 貫通力（大兵士耐性1 / 巨人5。99=遮られない）
   pierceDecay: boolean; // 貫通時に威力が減衰するか（false=減衰なし）
   maxHits: number; // 最大ヒット数(0=無制限)
   down: boolean; // ヒット時にダウンさせるか
   multiShot: number; // 同時発射弾数
-  soloCross: boolean; // 自分の前回軌跡でクロス可
+  crossSolo: boolean; // 自分の前回軌跡でもクロス可
+  chargeHits?: number; // 突撃型の攻撃判定数（既定2）
   lobRadius?: number; // 投擲型の着弾範囲半径
   lobTime?: number; // 投擲型の着弾までの時間
   coreMult?: number; // 拠点・城への倍率
@@ -71,6 +72,8 @@ export interface CasterDef {
   accent: string;
   glyph: string;
   desc: string;
+  /** 選択画面に出すドローの説明 */
+  dsNote: string;
 }
 
 export type StatKey =
