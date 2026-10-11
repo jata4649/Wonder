@@ -83,6 +83,7 @@ export const DRAW_PHYS = {
   minSpeedFrac: 0.03, // 停滞ドローの下限（基礎弾速に対する割合）
   maxSpeedFrac: 2.2,
   minLifetime: 0.25,
+  maxLifetime: 6, // 停滞しても最大この秒数で消える
 };
 
 export const CHAIN = {

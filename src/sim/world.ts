@@ -1,7 +1,8 @@
 // シミュレーション本体。描画から独立しており、ヘッドレスでも動く。
-import { MATCH, MINION } from '../config/balance';
-import { buildWalls, forestAt, type WallDef } from '../config/map';
-import type { Team } from '../config/types';
+import { HERO, MATCH, MINION } from '../config/balance';
+import { CASTER_BY_ID } from '../config/casters';
+import { LANE_WIDTH, buildWalls, forestAt, type Rect, type WallDef } from '../config/map';
+import type { Loadout, StatKey, Team } from '../config/types';
 import { createBases, startGateOpening, updateGate, type Base } from './bases';
 import type { DamageSource, HitOpts } from './combat';
 import { dist2, makeRng, type Rng } from './geom';
@@ -9,13 +10,33 @@ import { MatchState } from './gauge';
 import { SpatialGrid } from './grid';
 import { updateSpawns, updateSquads } from './minions';
 import { makeBolt, updateBolts, type Bolt } from './projectiles/bolt';
+import {
+  updateDrawProjectiles,
+  updateLobs,
+  updateStraightShots,
+  type DrawProjectile,
+  type LobShell,
+  type StraightShot,
+} from './projectiles/drawshot';
+import { Hero, type Buff } from './units/hero';
 import type { Minion, Mob, Squad } from './units/types';
 
 export type GameEvent =
   | { type: 'gateOpen'; base: Base }
   | { type: 'baseDestroyed'; base: Base; by: Team }
   | { type: 'damage'; x: number; y: number; amount: number; team: Team; fx?: HitOpts['fx']; big?: boolean }
-  | { type: 'ram'; x: number; y: number; team: Team };
+  | { type: 'ram'; x: number; y: number; team: Team }
+  | { type: 'blast'; x: number; y: number; r: number; team: Team }
+  | { type: 'sweep'; x: number; y: number; dx: number; dy: number; team: Team }
+  | { type: 'heroKilled'; hero: Hero; by: DamageSource }
+  | { type: 'chain'; hero: Hero; count: number; xp: number };
+
+export interface CrossResult {
+  crossed: boolean;
+  sizeMult: number;
+  powerAdd: number;
+  speedMult: number;
+}
 
 export interface WorldOptions {
   seed?: number;
@@ -29,6 +50,10 @@ export class World {
   minions: Minion[] = [];
   squads: Squad[] = [];
   bolts: Bolt[] = [];
+  heroes: Hero[] = [];
+  drawShots: DrawProjectile[] = [];
+  lobs: LobShell[] = [];
+  straightShots: StraightShot[] = [];
   grid = new SpatialGrid<Mob>();
   events: GameEvent[] = [];
   match = new MatchState();
@@ -82,6 +107,59 @@ export class World {
 
   *mobs(): Iterable<Mob> {
     yield* this.minions;
+    yield* this.heroes;
+  }
+
+  addHero(loadout: Loadout, team: Team, isPlayer: boolean, lane: number): Hero {
+    const def = CASTER_BY_ID[loadout.casterId];
+    const h = new Hero(this, this.nextId(), def, team, loadout, isPlayer, lane);
+    this.heroes.push(h);
+    return h;
+  }
+
+  // ---- 成長（M5/M6 で拡張） ----
+  teamLevel(_team: Team): number {
+    return 1;
+  }
+  statMods(_h: Hero, _key: StatKey): number {
+    return 0;
+  }
+  castSkill(_h: Hero, _slot: number, _x: number, _y: number) {}
+  castWonder(_h: Hero, _x: number, _y: number) {}
+  onChainBonus(h: Hero, count: number, xp: number) {
+    this.emit({ type: 'chain', hero: h, count, xp });
+  }
+  addBuff(h: Hero, b: Buff) {
+    const ex = h.buffs.find((x) => x.kind === b.kind);
+    if (ex) {
+      ex.value = b.value;
+      ex.t = Math.max(ex.t, b.t);
+    } else h.buffs.push({ ...b });
+  }
+
+  // ---- クロスドロー（M10 で実装） ----
+  checkCross(_h: Hero, _pts: { x: number; y: number }[]): CrossResult {
+    return { crossed: false, sizeMult: 1, powerAdd: 0, speedMult: 1 };
+  }
+  addTrail(_h: Hero, _pts: { x: number; y: number }[], _crossed: boolean) {}
+
+  // ---- 門 ----
+  /** team から見て通れない（敵の閉じた門）矩形。 */
+  closedGateRects(team: Team): Rect[] {
+    const out: Rect[] = [];
+    for (const b of this.bases) {
+      if (b.team === team || !b.gate || b.gate.state === 'open' || !b.alive) continue;
+      out.push({ x: b.gate.x - LANE_WIDTH / 2, y: b.gate.y - 14, w: LANE_WIDTH, h: 28 });
+    }
+    return out;
+  }
+  /** 弾が敵の閉じた門に当たるか（門はダメージを通さない）。 */
+  blockedByGate(x: number, y: number, team: Team): boolean {
+    for (const b of this.bases) {
+      if (b.team === team || !b.gate || b.gate.state === 'open' || !b.alive) continue;
+      if (Math.abs(x - b.gate.x) < LANE_WIDTH / 2 && Math.abs(y - b.gate.y) < 16) return true;
+    }
+    return false;
   }
 
   // ---- 視界 ----
@@ -98,18 +176,31 @@ export class World {
   }
 
   // ---- 戦闘フック（後続マイルストーンで拡張） ----
-  mobInvulnerable(_m: Mob): boolean {
+  mobInvulnerable(m: Mob): boolean {
+    if (m.kind === 'hero') return (m as Hero).isInvulnerable();
     return false;
   }
-  modifyIncomingDamage(_m: Mob, amount: number, _src: DamageSource): number {
+  modifyIncomingDamage(m: Mob, amount: number, _src: DamageSource): number {
+    if (m.kind === 'hero') {
+      for (const b of (m as Hero).buffs) if (b.kind === 'guard') amount *= b.value;
+    }
     return amount;
   }
   onMobDamaged(m: Mob, dealt: number, src: DamageSource, opts: HitOpts) {
     if (dealt > 0) this.emit({ type: 'damage', x: m.x, y: m.y - m.r, amount: dealt, team: src.team, fx: opts.fx });
   }
-  onMobKilled(_m: Mob, _src: DamageSource, _opts: HitOpts) {}
+  onMobKilled(m: Mob, src: DamageSource, _opts: HitOpts) {
+    if (m.kind === 'hero') {
+      const h = m as Hero;
+      h.die();
+      this.match.onHeroKilled(h.team);
+      const killer = this.heroes.find((x) => x.id === src.heroId);
+      if (killer) killer.kills++;
+      this.emit({ type: 'heroKilled', hero: h, by: src });
+    }
+  }
   applyDown(m: Mob) {
-    const dur = m.kind === 'minion' ? MINION.downSec : 0.6;
+    const dur = m.kind === 'minion' ? MINION.downSec : HERO.downSec;
     m.downTimer = Math.max(m.downTimer, dur);
   }
   onBaseDamaged(b: Base, dealt: number, src: DamageSource) {
@@ -156,8 +247,15 @@ export class World {
       if (m.revealTimer > 0) m.revealTimer -= dt;
     }
     updateSquads(this, dt);
+    for (const h of this.heroes) h.update(dt);
     updateBolts(this, this.bolts, dt);
+    updateDrawProjectiles(this, this.drawShots, dt);
+    updateLobs(this, this.lobs, dt);
+    updateStraightShots(this, this.straightShots, dt);
     this.bolts = this.bolts.filter((b) => b.alive);
+    this.drawShots = this.drawShots.filter((p) => p.alive);
+    this.lobs = this.lobs.filter((p) => p.alive);
+    this.straightShots = this.straightShots.filter((p) => p.alive);
     this.minions = this.minions.filter((m) => m.alive);
     for (const b of this.bases) {
       if (b.hitFlash > 0) b.hitFlash -= dt;
