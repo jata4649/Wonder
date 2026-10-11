@@ -82,6 +82,8 @@ export class World {
   giants: Giant[] = [];
   soul = new SoulSystem();
   pings: Ping[] = [];
+  /** ラグ補償用：キャストの過去位置（約0.3秒ぶん） */
+  private heroHistory: { t: number; pos: Map<number, { x: number; y: number }> }[] = [];
   trails: Trail[] = [];
   /** AI など、毎ティック sim の前に動くもの */
   controllers: { update(dt: number): void }[] = [];
@@ -158,9 +160,9 @@ export class World {
     return g;
   }
 
-  addHero(loadout: Loadout, team: Team, isPlayer: boolean, lane: number): Hero {
+  addHero(loadout: Loadout, team: Team, isPlayer: boolean, lane: number, id?: number): Hero {
     const def = CASTER_BY_ID[loadout.casterId];
-    const h = new Hero(this, this.nextId(), def, team, loadout, isPlayer, lane);
+    const h = new Hero(this, id ?? this.nextId(), def, team, loadout, isPlayer, lane);
     this.heroes.push(h);
     return h;
   }
@@ -242,10 +244,18 @@ export class World {
     return false;
   }
 
+  /** オンラインの鏡ワールド：見えないものはサーバーが送らないので、届いたものは全部見えている */
+  trustVisibility = false;
+
+  /** 壁（森の扉）のキャッシュを作り直す（鏡ワールドで拠点の状態を外から書き換えたとき）。 */
+  refreshWalls() {
+    this.activeWallCache = null;
+  }
+
   // ---- 視界 ----
   /** 森の中のユニットは、同じ森の中の敵（観測側）が近くにいない限り見えない。 */
   isVisibleTo(m: Mob, team: Team): boolean {
-    if (m.team === team || m.revealTimer > 0) return true;
+    if (this.trustVisibility || m.team === team || m.revealTimer > 0) return true;
     const f = forestAt(m.x, m.y);
     if (f < 0) return true;
     let seen = false;
@@ -266,7 +276,37 @@ export class World {
     }
     return amount;
   }
+  /** sec 秒前のキャスト位置（記録が無ければ undefined）。 */
+  pastPosition(id: number, sec: number): { x: number; y: number } | undefined {
+    const t = this.time - sec;
+    const hs = this.heroHistory;
+    for (let i = hs.length - 1; i >= 0; i--) {
+      if (hs[i].t <= t) {
+        const a = hs[i].pos.get(id);
+        const nb = hs[i + 1];
+        const b = nb?.pos.get(id);
+        if (a && b && nb.t > hs[i].t) {
+          const k = (t - hs[i].t) / (nb.t - hs[i].t);
+          return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
+        }
+        return a;
+      }
+    }
+    return hs[0]?.pos.get(id);
+  }
+
+  private recordHistory() {
+    const pos = new Map<number, { x: number; y: number }>();
+    for (const h of this.heroes) if (h.alive) pos.set(h.id, { x: h.x, y: h.y });
+    this.heroHistory.push({ t: this.time, pos });
+    while (this.heroHistory.length > 2 && this.heroHistory[0].t < this.time - 0.3) this.heroHistory.shift();
+  }
+
   onMobDamaged(m: Mob, dealt: number, src: DamageSource, opts: HitOpts) {
+    if (src.heroId !== undefined && m.kind === 'hero') {
+      const h = this.heroes.find((x) => x.id === src.heroId);
+      if (h) h.dmgHeroes += dealt;
+    }
     if (dealt > 0) this.emit({ type: 'damage', x: m.x, y: m.y - m.r, amount: dealt, team: src.team, fx: opts.fx, targetId: m.id });
   }
   onMobKilled(m: Mob, src: DamageSource, opts: HitOpts) {
@@ -292,6 +332,10 @@ export class World {
     m.downTimer = Math.max(m.downTimer, dur);
   }
   onBaseDamaged(b: Base, dealt: number, src: DamageSource) {
+    if (src.heroId !== undefined) {
+      const h = this.heroes.find((x) => x.id === src.heroId);
+      if (h) h.dmgBases += dealt;
+    }
     this.match.onBaseDamaged(b, dealt);
     if (dealt > 0) this.emit({ type: 'damage', x: b.x, y: b.y - b.r, amount: dealt, team: src.team, big: true });
   }
@@ -300,7 +344,7 @@ export class World {
   }
 
   spawnBolt(from: Mob, target: Mob, damage: number) {
-    this.bolts.push(makeBolt(from, target, damage));
+    this.bolts.push(makeBolt(this.nextId(), from, target, damage));
   }
 
   /** 拠点の破壊処理。 */
@@ -334,6 +378,7 @@ export class World {
     this.time += dt;
     this.match.tick(dt);
     this.grid.rebuild(this.mobs());
+    this.recordHistory();
     updateSpawns(this, dt);
     for (const m of this.minions) {
       if (m.downTimer > 0) m.downTimer -= dt;

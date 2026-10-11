@@ -164,6 +164,8 @@ export interface DrawProjectile {
   crossed: boolean;
   history: Vec[]; // 描画用の残像
   coreMult: number;
+  /** ラグ補償：キャストへの当たり判定をこの秒数だけ過去の位置で行う（0=補償なし） */
+  rewind: number;
 }
 
 export function makeDrawProjectile(
@@ -171,7 +173,7 @@ export function makeDrawProjectile(
   owner: DSOwner,
   prof: PathProfile,
   def: DrawShotDef,
-  mods: { power: number; width: number; piercePower: number; speedMult: number; crossed: boolean; color: string },
+  mods: { power: number; width: number; piercePower: number; speedMult: number; crossed: boolean; color: string; rewindMs?: number },
 ): DrawProjectile {
   if (mods.speedMult !== 1) prof = { ...prof, speed: prof.speed.map((v) => v * mods.speedMult), duration: prof.duration / mods.speedMult };
   return {
@@ -198,7 +200,17 @@ export function makeDrawProjectile(
     crossed: mods.crossed,
     history: [],
     coreMult: def.coreMult ?? 1,
+    rewind: lagCompSec(mods.rewindMs ?? 0),
   };
+}
+
+/**
+ * ラグ補償（SPEC 8.4）：過去 LAG_COMP_MS（150ms）までの位置で判定する。補償量は 150ms で頭打ち。
+ * 遅延が大きすぎる（操作不能レベル）相手はサーバー側で 0 を渡し、素の位置で判定する。
+ */
+export const LAG_COMP_MS = 150;
+export function lagCompSec(ms: number) {
+  return ms > 0 ? Math.min(ms, LAG_COMP_MS) / 1000 : 0;
 }
 
 /** 減衰係数（ヒット数 n=0 が1発目）。 */
@@ -278,8 +290,17 @@ function collide(world: World, p: DrawProjectile) {
   }
   const cands: Mob[] = [];
   world.grid.query(p.x, p.y, r, (m) => {
+    // ラグ補償中はキャストだけ過去の位置で判定する（兵士・巨人・拠点などは補償しない）
+    if (p.rewind > 0 && m.kind === 'hero') return;
     if (m.team !== p.team && !p.hitIds.has(m.id) && !isInvulnerable(world, m)) cands.push(m);
   });
+  if (p.rewind > 0) {
+    for (const h of world.heroes) {
+      if (h.team === p.team || p.hitIds.has(h.id) || isInvulnerable(world, h)) continue;
+      const past = world.pastPosition(h.id, p.rewind) ?? h;
+      if (dist2(past.x, past.y, p.x, p.y) < (r + h.r) ** 2) cands.push(h);
+    }
+  }
   if (cands.length > 1) cands.sort((a, b) => dist2(a.x, a.y, p.x, p.y) - dist2(b.x, b.y, p.x, p.y));
   for (const m of cands) {
     p.hitIds.add(m.id);
@@ -356,6 +377,7 @@ export function updateLobs(world: World, list: LobShell[], dt: number) {
 // ストレートショット：直線の高速弾。基本は貫通しない。特性（薙ぎ払い・爆風・3点射）あり。
 
 export interface StraightShot {
+  id: number;
   team: Team;
   ownerId: number;
   x: number;
@@ -376,6 +398,7 @@ export interface StraightShot {
 }
 
 export function makeStraightShots(
+  nextId: () => number,
   owner: { id: number; team: Team; x: number; y: number },
   def: StraightDef,
   range: number,
@@ -388,6 +411,7 @@ export function makeStraightShots(
   const base = Math.atan2(dirY / d, dirX / d);
   const angles = def.trait === 'triple' ? [base, base - 0.2, base + 0.2] : [base];
   return angles.map((a, i) => ({
+    id: nextId(),
     team: owner.team,
     ownerId: owner.id,
     x: owner.x + Math.cos(a) * 20,

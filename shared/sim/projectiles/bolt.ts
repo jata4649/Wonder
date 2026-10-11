@@ -6,6 +6,7 @@ import type { Mob } from '../units/types';
 import type { World } from '../world';
 
 export interface Bolt {
+  id: number;
   team: Team;
   x: number;
   y: number;
@@ -17,8 +18,9 @@ export interface Bolt {
   src: DamageSource;
 }
 
-export function makeBolt(from: Mob, target: Mob, damage: number, kind: DamageSource['kind'] = 'minion'): Bolt {
+export function makeBolt(id: number, from: Mob, target: Mob, damage: number, kind: DamageSource['kind'] = 'minion'): Bolt {
   return {
+    id,
     team: from.team,
     x: from.x,
     y: from.y,

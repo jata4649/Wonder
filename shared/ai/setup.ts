@@ -29,12 +29,41 @@ function pickTeam(rng: Rng, n: number, exclude: string[]): string[] {
 
 export class AIDirector {
   ais: HeroAI[] = [];
+  /** 人間が操作しているキャスト（レーン割り当てでは現在地を固定として扱う） */
+  humans = new Set<Hero>();
   private reassignT = 0;
 
   constructor(
     private world: World,
-    private player: Hero | undefined,
-  ) {}
+    player?: Hero,
+  ) {
+    if (player) this.humans.add(player);
+  }
+
+  /** CPU に操作させる（試合開始時の補充／切断時の引き継ぎ）。 */
+  attach(hero: Hero, difficulty: Difficulty) {
+    if (this.ais.some((a) => a.hero === hero)) return;
+    this.humans.delete(hero);
+    hero.cmds.length = 0;
+    hero.moveX = hero.moveY = 0;
+    hero.isPlayer = false;
+    const ai = new HeroAI(this.world, hero, difficulty, (hero.lane as LaneId) ?? 1);
+    this.ais.push(ai);
+    this.reassignT = 0;
+  }
+
+  /** 人間に操作を戻す（再接続／途中参加）。 */
+  detach(hero: Hero) {
+    this.ais = this.ais.filter((a) => a.hero !== hero);
+    hero.moveX = hero.moveY = 0;
+    hero.cmds.length = 0;
+    hero.isPlayer = true;
+    this.humans.add(hero);
+  }
+
+  isAI(hero: Hero) {
+    return this.ais.some((a) => a.hero === hero);
+  }
 
   update(dt: number) {
     this.handlePings();
@@ -75,7 +104,7 @@ export class AIDirector {
       const input = members.map((h) => ({
         id: h.id,
         role: h.def.role,
-        fixedLane: h === this.player ? (nearestLane(h.x) as LaneId) : undefined,
+        fixedLane: this.humans.has(h) ? (nearestLane(h.x) as LaneId) : undefined,
       }));
       const asg = assignLanes(input);
       for (const ai of this.ais) {
@@ -115,4 +144,40 @@ export function setupMatch(
   director.reassign();
   world.controllers.push(director);
   return { player, director };
+}
+
+/** 1枠ぶんの設定（オンライン：人間 or CPU）。loadout 省略時は CPU 用にランダム編成。 */
+export interface SlotSpec {
+  team: Team;
+  human: boolean;
+  loadout?: Loadout;
+}
+
+/**
+ * 任意の人数構成で試合を作る（オンライン・協力・ルーム用）。
+ * 同じチーム内でキャストが重複しないように CPU のキャストを選ぶ。
+ */
+export function createMatch(world: World, slots: SlotSpec[], difficulty: Difficulty): { heroes: Hero[]; director: AIDirector } {
+  const rng = world.rng;
+  const director = new AIDirector(world);
+  const heroes: Hero[] = [];
+  for (const team of [0, 1] as Team[]) {
+    const mine = slots.filter((s) => s.team === team);
+    const used = mine.filter((s) => s.loadout).map((s) => s.loadout!.casterId);
+    for (const s of mine) {
+      let lo = s.loadout;
+      if (!lo) {
+        const id = pickTeam(rng, 1, used)[0] ?? CASTERS[rng.int(0, CASTERS.length)].id;
+        used.push(id);
+        lo = randomLoadout(rng, id);
+      }
+      const h = world.addHero(lo, team, s.human, 1);
+      heroes.push(h);
+      if (s.human) director.humans.add(h);
+      else director.attach(h, team === 0 && difficulty === 'easy' ? 'normal' : difficulty);
+    }
+  }
+  director.reassign();
+  world.controllers.push(director);
+  return { heroes, director };
 }

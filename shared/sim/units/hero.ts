@@ -17,7 +17,7 @@ import type { Mob } from './types';
 
 export type Command =
   | { t: 'ss'; x: number; y: number }
-  | { t: 'ds'; pts: Vec[] }
+  | { t: 'ds'; pts: Vec[]; lagMs?: number }
   | { t: 'evade'; dx: number; dy: number }
   | { t: 'skill'; slot: number; x: number; y: number }
   | { t: 'ws'; x: number; y: number };
@@ -75,6 +75,12 @@ export class Hero implements Mob, DSOwner {
   lastTrailId = -1;
   kills = 0;
   deaths = 0;
+  /** 与ダメージ（対キャスト・対拠点）。レート更新・リザルト用 */
+  dmgHeroes = 0;
+  dmgBases = 0;
+  /** オンライン：表示名・サーバーから受け取った高さ（跳躍） */
+  netName?: string;
+  netZ?: number;
   /** 直近の表示用メッセージ（MP不足など） */
   notice: { text: string; t: number } | null = null;
   lane: number;
@@ -256,7 +262,7 @@ export class Hero implements Mob, DSOwner {
       case 'ss':
         return this.fireStraight(c.x, c.y);
       case 'ds':
-        return this.fireDraw(c.pts);
+        return this.fireDraw(c.pts, c.lagMs ?? 0);
       case 'evade':
         return this.evade(c.dx, c.dy);
       case 'skill':
@@ -273,7 +279,7 @@ export class Hero implements Mob, DSOwner {
     const dy = ty - this.y;
     const def = this.def.straight;
     const atk = this.stat('straightAtk');
-    this.world.straightShots.push(...makeStraightShots(this, def, this.def.straightRange, dx, dy, atk, this.def.accent));
+    this.world.straightShots.push(...makeStraightShots(() => this.world.nextId(), this, def, this.def.straightRange, dx, dy, atk, this.def.accent));
     if (def.trait === 'sweep') {
       // 薙ぎ払い：前方の近距離扇形
       const d = Math.hypot(dx, dy) || 1;
@@ -302,7 +308,7 @@ export class Hero implements Mob, DSOwner {
   }
 
   /** 描いた軌跡を検証してドローショットを発動。 */
-  fireDraw(raw: Vec[]) {
+  fireDraw(raw: Vec[], lagMs = 0) {
     const d = this.def.draw;
     if (raw.length < 2) return;
     if (this.mp < d.mpCost) {
@@ -336,6 +342,7 @@ export class Hero implements Mob, DSOwner {
               speedMult: cross.speedMult,
               crossed: cross.crossed,
               color,
+              rewindMs: lagMs,
             }),
           );
           this.chain.alive++;
@@ -540,6 +547,7 @@ export class Hero implements Mob, DSOwner {
 
   /** 跳躍中の高さ（描画用）。 */
   get z() {
+    if (this.netZ !== undefined && !this.leap) return this.netZ;
     if (this.state !== 'leap' || !this.leap) return 0;
     const t = Math.min(1, this.stateT / this.leap.T);
     return Math.sin(t * Math.PI) * 140;
